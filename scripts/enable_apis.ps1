@@ -1,9 +1,26 @@
 $ErrorActionPreference = 'Continue'
-$dir = "C:\Users\hp\AppData\Local\Temp\opencode\career-os-hub\scripts"
-$t = Get-Content "$dir\firebase_token.json" | ConvertFrom-Json
+$dir = $PSScriptRoot
+$t = Get-Content (Join-Path $dir 'firebase_token.json') | ConvertFrom-Json
+
+# OAuth client credentials are loaded from a git-ignored file
+# (scripts/firebase_secrets.json) or environment variables - never hardcoded.
+# schema: { "client_id": "...", "client_secret": "..." }
+$clientId = $env:FIREBASE_OAUTH_CLIENT_ID
+$clientSecret = $env:FIREBASE_OAUTH_CLIENT_SECRET
+$secretsPath = Join-Path $dir 'firebase_secrets.json'
+if (Test-Path $secretsPath) {
+    $s = Get-Content $secretsPath | ConvertFrom-Json
+    if (-not $clientId) { $clientId = $s.client_id }
+    if (-not $clientSecret) { $clientSecret = $s.client_secret }
+}
+if (-not $clientId -or -not $clientSecret) {
+    Write-Error "Missing OAuth credentials. Set FIREBASE_OAUTH_CLIENT_ID / FIREBASE_OAUTH_CLIENT_SECRET or create scripts/firebase_secrets.json"
+    exit 1
+}
+
 $body = @{
-    client_id     = "563584335869-fgrhgmd47bqnekij5i8b5pr03ho849e6.apps.googleusercontent.com"
-    client_secret = "j9iVZfS8kkCEFUPaAeJV0sAi"
+    client_id     = $clientId
+    client_secret = $clientSecret
     refresh_token = $t.refresh_token
     grant_type    = "refresh_token"
 }

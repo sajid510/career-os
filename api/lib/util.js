@@ -86,8 +86,8 @@ function dhakaIso(y, m, day, h, min) {
 
 // Next ISO occurrences of a weekly class (dayOfWeek 0=Sunday) starting at HH:MM
 // within the next `horizonDays` days (inclusive of today), Dhaka local time.
-function nextClassOccurrences(dayOfWeek, startTime, horizonDays) {
-  const now = Date.now();
+function nextClassOccurrences(dayOfWeek, startTime, horizonDays, nowMs) {
+  const now = nowMs != null ? nowMs : Date.now();
   const [h, min] = String(startTime || '00:00').split(':').map(Number);
   const parts = dhakaParts(now);
   const baseUtc = Date.UTC(parts.y, parts.m - 1, parts.day);
