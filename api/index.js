@@ -13,6 +13,8 @@ const { callGemini, buildSystemPrompt, executeTool, TOOL_DEFS, textFrom } = requ
 const { syncAll, syncCareerIo, syncTeamDashboard, ingestConnectorData } = require('./lib/connectors');
 const { ensureClassReminders, ensureDeadlineReminders } = require('./lib/reminders');
 const { buildAuthUrl, syncClassroom, getStatus: getClassroomStatus, HUB_BASE, CALLBACK_PATH } = require('./lib/classroom');
+const { PHASES: RESTART_PHASES, DEADLINES: RESTART_DEADLINES, MILESTONES: RESTART_MILESTONES, TASKS: RESTART_TASKS, GOALS: RESTART_GOALS, SUMMARY: RESTART_SUMMARY } = require('./lib/plan');
+const { SCHOLARSHIPS, UNIVERSITIES, PROFESSORS, CGPA, NOTES } = require('./lib/mission');
 
 const app = express();
 app.use(cors({ origin: true }));
@@ -190,7 +192,7 @@ async function applyDecomposedPlan(plan) {
   }
   if (plan.tasks && plan.tasks.length) {
     await db.collection('tasks').get().then((snap) => { const ops = []; snap.forEach((d) => ops.push(d.ref.delete())); return Promise.all(ops); });
-    for (const t of plan.tasks) await addDoc('tasks', Object.assign({}, t, { status: 'open', description: '', outcome: '', rating: 0, source: 'plan', completedAt: '', createdAt: nowIso() }));
+    for (const t of plan.tasks) await addDoc('tasks', Object.assign({}, t, { status: 'open', description: t.description || '', outcome: '', rating: 0, source: 'plan', completedAt: '', createdAt: nowIso() }));
     out.tasks = plan.tasks.length;
   }
   if (plan.goals && plan.goals.length) {
@@ -475,6 +477,26 @@ app.post('/api/plan/ingest', requireAuth, async (req, res) => {
   }
 });
 
+// ---- restart the mission from August 2026 (rebased plan) ----
+app.post('/api/plan/restart', requireAuth, async (req, res) => {
+  try {
+    const plan = {
+      phases: RESTART_PHASES.map((p) => ({ key: p.key, label: p.label, focus: p.focus, status: p.status })),
+      milestones: RESTART_MILESTONES.map((m) => ({ title: m.title, dueAt: m.dueAt, category: m.category, status: m.status, phase: m.phase })),
+      deadlines: RESTART_DEADLINES.map((d) => ({ title: d.title, dueAt: d.dueAt, category: d.category, notes: d.notes, critical: d.critical })),
+      tasks: RESTART_TASKS.map((t) => ({ title: t.title, dueAt: t.dueAt, category: t.category, priority: t.priority, phase: t.phase, description: t.description })),
+      goals: RESTART_GOALS.map((g) => ({ goal: g.goal, by: g.by })),
+      summary: RESTART_SUMMARY,
+    };
+    const applied = await applyDecomposedPlan(plan);
+    await ensureClassReminders();
+    const dlReminders = await ensureDeadlineReminders();
+    res.json({ ok: true, applied, dlReminders: dlReminders.created, note: 'Mission restarted from August 2026. End goal unchanged: fully funded offer by 2028 intake.' });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
 // ---- events ----
 app.get('/api/events', requireAuth, async (req, res) => {
   const events = await listDocs('events');
@@ -727,6 +749,129 @@ app.post('/api/classroom/sync', requireAuth, async (req, res) => {
 });
 app.post('/api/classroom/disconnect', requireAuth, async (req, res) => {
   await saveSettings({ classroomRefreshToken: '', classroomAccessToken: '', classroomTokenExpiry: 0, classroomEmail: '' });
+  res.json({ ok: true });
+});
+
+// ---- mission: scholarships ----
+app.get('/api/scholarships', requireAuth, async (req, res) => {
+  let items = await listDocs('scholarships');
+  items.sort((a, b) => (a.priority || 'C').localeCompare(b.priority || 'C') || (a.deadline || '9999').localeCompare(b.deadline || '9999'));
+  res.json({ ok: true, scholarships: items });
+});
+app.post('/api/scholarships', requireAuth, async (req, res) => {
+  const b = req.body || {};
+  if (!b.name) return res.status(400).json({ ok: false, error: 'name required' });
+  const rec = await addDoc('scholarships', {
+    name: b.name, country: b.country || '', deadline: b.deadline || '', cgpaReq: b.cgpaReq || '',
+    status: b.status || 'Research', priority: b.priority || 'B', coverage: b.coverage || '',
+    docs: b.docs || '', notes: b.notes || '', url: b.url || '', createdAt: nowIso(),
+  });
+  res.json({ ok: true, scholarship: rec });
+});
+app.patch('/api/scholarships/:id', requireAuth, async (req, res) => {
+  const doc = await getDoc('scholarships/' + req.params.id);
+  if (!doc) return res.status(404).json({ ok: false, error: 'not found' });
+  const patch = {};
+  ['name', 'country', 'deadline', 'cgpaReq', 'status', 'priority', 'coverage', 'docs', 'notes', 'url'].forEach((k) => { if (req.body[k] !== undefined) patch[k] = req.body[k]; });
+  await setDoc('scholarships/' + req.params.id, patch);
+  res.json({ ok: true });
+});
+app.delete('/api/scholarships/:id', requireAuth, async (req, res) => {
+  await deleteDoc('scholarships/' + req.params.id);
+  res.json({ ok: true });
+});
+
+// ---- mission: universities ----
+app.get('/api/universities', requireAuth, async (req, res) => {
+  let items = await listDocs('universities');
+  items.sort((a, b) => (a.priority || 'C').localeCompare(b.priority || 'C'));
+  res.json({ ok: true, universities: items });
+});
+app.post('/api/universities', requireAuth, async (req, res) => {
+  const b = req.body || {};
+  if (!b.name) return res.status(400).json({ ok: false, error: 'name required' });
+  const rec = await addDoc('universities', {
+    name: b.name, country: b.country || '', dept: b.dept || '', scholarship: b.scholarship || '',
+    status: b.status || 'Research', appDeadline: b.appDeadline || '', priority: b.priority || 'B',
+    url: b.url || '', notes: b.notes || '', createdAt: nowIso(),
+  });
+  res.json({ ok: true, university: rec });
+});
+app.patch('/api/universities/:id', requireAuth, async (req, res) => {
+  const doc = await getDoc('universities/' + req.params.id);
+  if (!doc) return res.status(404).json({ ok: false, error: 'not found' });
+  const patch = {};
+  ['name', 'country', 'dept', 'scholarship', 'status', 'appDeadline', 'priority', 'url', 'notes'].forEach((k) => { if (req.body[k] !== undefined) patch[k] = req.body[k]; });
+  await setDoc('universities/' + req.params.id, patch);
+  res.json({ ok: true });
+});
+app.delete('/api/universities/:id', requireAuth, async (req, res) => {
+  await deleteDoc('universities/' + req.params.id);
+  res.json({ ok: true });
+});
+
+// ---- mission: professors ----
+app.get('/api/professors', requireAuth, async (req, res) => {
+  const items = await listDocs('professors');
+  res.json({ ok: true, professors: items });
+});
+app.post('/api/professors', requireAuth, async (req, res) => {
+  const b = req.body || {};
+  if (!b.university) return res.status(400).json({ ok: false, error: 'university required' });
+  const rec = await addDoc('professors', {
+    name: b.name || '', university: b.university, country: b.country || '', field: b.field || '',
+    status: b.status || 'To Contact', email: b.email || '', contacted: b.contacted || '',
+    response: b.response || '', notes: b.notes || '', scholarship: b.scholarship || '', url: b.url || '', createdAt: nowIso(),
+  });
+  res.json({ ok: true, professor: rec });
+});
+app.patch('/api/professors/:id', requireAuth, async (req, res) => {
+  const doc = await getDoc('professors/' + req.params.id);
+  if (!doc) return res.status(404).json({ ok: false, error: 'not found' });
+  const patch = {};
+  ['name', 'university', 'country', 'field', 'status', 'email', 'contacted', 'response', 'notes', 'scholarship', 'url'].forEach((k) => { if (req.body[k] !== undefined) patch[k] = req.body[k]; });
+  await setDoc('professors/' + req.params.id, patch);
+  res.json({ ok: true });
+});
+app.delete('/api/professors/:id', requireAuth, async (req, res) => {
+  await deleteDoc('professors/' + req.params.id);
+  res.json({ ok: true });
+});
+
+// ---- mission: CGPA ----
+app.get('/api/cgpa', requireAuth, async (req, res) => {
+  const c = await getDoc('mission/cgpa');
+  res.json({ ok: true, cgpa: c || {} });
+});
+app.post('/api/cgpa', requireAuth, async (req, res) => {
+  const b = req.body || {};
+  const patch = {};
+  ['cgpa', 'completedCredits', 'totalDegreeCredits', 'target', 'backlogs', 'futureSems', 'notes'].forEach((k) => { if (b[k] !== undefined) patch[k] = b[k]; });
+  const c = await setDoc('mission/cgpa', patch);
+  res.json({ ok: true, cgpa: c });
+});
+
+// ---- mission: notes (notebooks) ----
+app.get('/api/notes', requireAuth, async (req, res) => {
+  const items = await listDocs('notes');
+  res.json({ ok: true, notes: items });
+});
+app.post('/api/notes', requireAuth, async (req, res) => {
+  const b = req.body || {};
+  if (!b.title) return res.status(400).json({ ok: false, error: 'title required' });
+  const rec = await addDoc('notes', { title: b.title, color: b.color || '#f59e0b', entries: b.entries || [], createdAt: nowIso() });
+  res.json({ ok: true, note: rec });
+});
+app.patch('/api/notes/:id', requireAuth, async (req, res) => {
+  const doc = await getDoc('notes/' + req.params.id);
+  if (!doc) return res.status(404).json({ ok: false, error: 'not found' });
+  const patch = {};
+  ['title', 'color', 'entries'].forEach((k) => { if (req.body[k] !== undefined) patch[k] = req.body[k]; });
+  await setDoc('notes/' + req.params.id, patch);
+  res.json({ ok: true });
+});
+app.delete('/api/notes/:id', requireAuth, async (req, res) => {
+  await deleteDoc('notes/' + req.params.id);
   res.json({ ok: true });
 });
 

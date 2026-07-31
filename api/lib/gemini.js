@@ -362,6 +362,15 @@ async function buildSystemPrompt() {
     .sort((a, b) => a.dueAt.localeCompare(b.dueAt))
     .slice(0, 8)
     .map((d) => '  - ' + d.title + ' (' + humanDate(d.dueAt) + ', ' + inDays(d.dueAt) + ')');
+  const scholarships = await listDocs('scholarships').catch(() => []);
+  const professors = await listDocs('professors').catch(() => []);
+  const uniCount = (await listDocs('universities').catch(() => [])).length;
+  const topScholarships = scholarships
+    .filter((s) => s.deadline && s.status !== 'Applied' && s.status !== 'Accepted')
+    .sort((a, b) => a.deadline.localeCompare(b.deadline))
+    .slice(0, 6)
+    .map((s) => '  - ' + s.name + ' (' + s.country + ', ' + humanDate(s.deadline) + ', ' + inDays(s.deadline) + ')');
+  const posProfs = professors.filter((p) => ['Responded', 'Meeting Set', 'Positive'].includes(p.status)).length;
   const upcoming = deadlines
     .filter((d) => d.dueAt && daysUntil(d.dueAt) >= 0 && daysUntil(d.dueAt) <= 120)
     .sort((a, b) => a.dueAt.localeCompare(b.dueAt))
@@ -410,6 +419,11 @@ async function buildSystemPrompt() {
   lines.push('');
   lines.push('Upcoming class tests / classroom deadlines (next 30 days):');
   lines.push(upcomingTests.length ? upcomingTests.join('\n') : '  (none)');
+  lines.push('');
+  lines.push('=== MASTERS MISSION TRACKERS ===');
+  lines.push('Scholarships (priority order by deadline):');
+  lines.push(topScholarships.length ? topScholarships.join('\n') : '  (none)');
+  lines.push('Universities tracked: ' + uniCount + ' | Professors contacted: ' + professors.length + ' (' + posProfs + ' positive responses)');
   lines.push('');
   lines.push('=== SELF-LEARNING MEMORY (facts learned about Sadnan) ===');
   lines.push(learnedFacts.length ? learnedFacts.join('\n') : '  (none yet)');

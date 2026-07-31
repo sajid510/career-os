@@ -161,6 +161,7 @@ footer{color:var(--mut);font-size:11.5px;text-align:center;padding:26px 0 14px}
       <button data-tab="plan">Plan</button>
       <button data-tab="schedule">Schedule</button>
       <button data-tab="classes">Classes</button>
+      <button data-tab="mission">Mission</button>
       <button data-tab="ai">AI Assistant</button>
       <button data-tab="learning">Learning</button>
       <button data-tab="settings">Settings</button>
@@ -297,6 +298,81 @@ footer{color:var(--mut);font-size:11.5px;text-align:center;padding:26px 0 14px}
     </div>
   </section>
 
+  <!-- MISSION -->
+  <section id="tab-mission" class="hidden">
+    <div class="card" style="margin-bottom:12px">
+      <div style="display:flex;gap:6px;flex-wrap:wrap" id="missionNav">
+        <button class="btn ghost mis-btn active" data-mis="scholarships">Scholarships</button>
+        <button class="btn ghost mis-btn" data-mis="universities">Universities</button>
+        <button class="btn ghost mis-btn" data-mis="professors">Professors</button>
+        <button class="btn ghost mis-btn" data-mis="cgpa">CGPA</button>
+        <button class="btn ghost mis-btn" data-mis="notes">Notes</button>
+      </div>
+    </div>
+
+    <!-- Scholarships -->
+    <div class="mis-view" id="mis-scholarships">
+      <div class="card" style="margin-bottom:12px">
+        <h3>➕ Add scholarship</h3>
+        <div class="row">
+          <input class="grow" id="scName" placeholder="Scholarship name">
+          <input id="scCountry" placeholder="Country" style="max-width:120px">
+          <input id="scDeadline" type="date" style="max-width:150px">
+          <select id="scPri" style="max-width:90px"><option value="A">A</option><option value="B">B</option><option value="C">C</option></select>
+          <input id="scCoverage" placeholder="Coverage" style="max-width:180px">
+          <button class="btn" onclick="addScholarship()">Add</button>
+        </div>
+      </div>
+      <div class="card"><h3>🎯 Scholarships</h3><div id="scholarshipsList"></div></div>
+    </div>
+
+    <!-- Universities -->
+    <div class="mis-view hidden" id="mis-universities">
+      <div class="card" style="margin-bottom:12px">
+        <h3>➕ Add university</h3>
+        <div class="row">
+          <input class="grow" id="uName" placeholder="University name">
+          <input id="uCountry" placeholder="Country" style="max-width:120px">
+          <input id="uDept" placeholder="Department" style="max-width:200px">
+          <input id="uDeadline" type="date" style="max-width:150px">
+          <select id="uPri" style="max-width:90px"><option value="B">B</option><option value="A">A</option><option value="C">C</option></select>
+          <button class="btn" onclick="addUniversity()">Add</button>
+        </div>
+      </div>
+      <div class="card"><h3>🏛 Universities</h3><div id="universitiesList"></div></div>
+    </div>
+
+    <!-- Professors -->
+    <div class="mis-view hidden" id="mis-professors">
+      <div class="card" style="margin-bottom:12px">
+        <h3>➕ Add professor</h3>
+        <div class="row">
+          <input id="pName" placeholder="Professor name" style="max-width:170px">
+          <input class="grow" id="pUni" placeholder="University *">
+          <input id="pCountry" placeholder="Country" style="max-width:100px">
+          <input id="pField" placeholder="Research field" style="max-width:180px">
+          <button class="btn" onclick="addProfessor()">Add</button>
+        </div>
+      </div>
+      <div class="card"><h3>◉ Professor outreach</h3><div id="professorsList"></div></div>
+    </div>
+
+    <!-- CGPA -->
+    <div class="mis-view hidden" id="mis-cgpa">
+      <div class="grid stat-grid" id="cgpaStats" style="margin-bottom:12px"></div>
+      <div class="card">
+        <h3>📐 Backlog grade replacement (CGPA lever)</h3>
+        <div id="cgpaBacklogs"></div>
+        <div style="margin-top:12px"><small id="cgpaNotes"></small></div>
+      </div>
+    </div>
+
+    <!-- Notes -->
+    <div class="mis-view hidden" id="mis-notes">
+      <div id="notesList"></div>
+    </div>
+  </section>
+
   <!-- AI -->
   <section id="tab-ai" class="hidden">
     <div class="card">
@@ -406,6 +482,7 @@ document.querySelectorAll('nav button').forEach((b) => b.addEventListener('click
   if (tab === 'plan') loadPlan();
   if (tab === 'schedule') loadSchedule();
   if (tab === 'classes') loadClasses();
+  if (tab === 'mission') loadMission();
   if (tab === 'learning') loadLearning();
   if (tab === 'settings') loadSettings();
   if (tab === 'ai') document.getElementById('chatInput').focus();
@@ -605,6 +682,162 @@ function classroomSync() {
 }
 function classroomDisconnect() {
   api('/api/classroom/disconnect', 'POST').then(() => { loadClassroom(); toast('Disconnected'); }).catch((e) => toast(e.message));
+}
+
+// ----- MISSION -----
+let CGPA_DATA = { backlogs: [] };
+document.getElementById('missionNav').addEventListener('click', (e) => {
+  const b = e.target.closest('.mis-btn');
+  if (!b) return;
+  document.querySelectorAll('.mis-btn').forEach((x) => x.classList.remove('active'));
+  b.classList.add('active');
+  document.querySelectorAll('.mis-view').forEach((x) => x.classList.add('hidden'));
+  document.getElementById('mis-' + b.dataset.mis).classList.remove('hidden');
+  if (b.dataset.mis === 'scholarships') loadScholarships();
+  if (b.dataset.mis === 'universities') loadUniversities();
+  if (b.dataset.mis === 'professors') loadProfessors();
+  if (b.dataset.mis === 'cgpa') loadCGPA();
+  if (b.dataset.mis === 'notes') loadNotes();
+});
+function loadMission() { loadScholarships(); loadUniversities(); loadProfessors(); loadCGPA(); loadNotes(); }
+
+const SCH_ST = ['Research', 'Planning', 'Docs Prep', 'Applied', 'Interview', 'Accepted', 'Rejected', 'Watching'];
+const UNI_ST = ['Research', 'Shortlisted', 'Prof. Contacted', 'App Prep', 'Applied', 'Interview', 'Accepted', 'Rejected'];
+const PROF_ST = ['To Contact', 'Emailed', 'No Response', 'Responded', 'Meeting Set', 'Positive', 'Negative'];
+
+function loadScholarships() {
+  api('/api/scholarships').then((o) => {
+    const list = o.scholarships || [];
+    document.getElementById('scholarshipsList').innerHTML = list.length ? list.map((s) => {
+      const d = s.deadline ? Math.ceil((new Date(s.deadline) - new Date()) / 86400000) : null;
+      const pri = s.priority === 'A' ? 'crit' : s.priority === 'B' ? 'warn' : 'low';
+      return '<div class="item"><div class="dot ' + pri + '"></div><div class="txt">' +
+        '<div class="t">' + esc(s.name) + ' <span class="tag">' + esc(s.country || '') + '</span>' + (d !== null ? '<span class="tag ' + (d <= 30 ? 'soon' : '') + '">' + (d >= 0 ? d + 'd' : 'past') + '</span>' : '') + '</div>' +
+        '<div class="d">' + (s.deadline ? esc(fmt(s.deadline)) : '') + ' · GPA ' + esc(s.cgpaReq || '-') + (s.coverage ? ' · ' + esc(s.coverage) : '') + '</div>' +
+        (s.notes ? '<div class="d">📌 ' + esc(s.notes) + '</div>' : '') +
+        '</div><select onchange="setScholarship(\'' + s.id + '\',this.value)" style="width:110px;padding:4px 6px;font-size:12px">' + SCH_ST.map((x) => '<option ' + (s.status === x ? 'selected' : '') + '>' + x + '</option>').join('') + '</select>' +
+        (s.url ? '<a href="' + esc(s.url) + '" target="_blank" style="font-size:14px">🔗</a>' : '') +
+        '<button onclick="delScholarship(\'' + s.id + '\')" style="background:none;border:none;color:var(--mut);font-size:14px">🗑️</button></div>';
+    }).join('') : '<div class="empty">No scholarships yet</div>';
+  }).catch((e) => toast(e.message));
+}
+function addScholarship() {
+  const name = document.getElementById('scName').value.trim();
+  if (!name) return toast('Name required');
+  api('/api/scholarships', 'POST', {
+    name, country: document.getElementById('scCountry').value.trim(),
+    deadline: document.getElementById('scDeadline').value || '',
+    priority: document.getElementById('scPri').value,
+    coverage: document.getElementById('scCoverage').value.trim(),
+  }).then(() => { ['scName', 'scCountry', 'scDeadline', 'scCoverage'].forEach((i) => { document.getElementById(i).value = ''; }); loadScholarships(); toast('Added'); }).catch((e) => toast(e.message));
+}
+function setScholarship(id, status) { api('/api/scholarships/' + id, 'PATCH', { status }).then(loadScholarships).catch((e) => toast(e.message)); }
+function delScholarship(id) { api('/api/scholarships/' + id, 'DELETE').then(loadScholarships).catch((e) => toast(e.message)); }
+
+function loadUniversities() {
+  api('/api/universities').then((o) => {
+    const list = o.universities || [];
+    const byCountry = [...new Set(list.map((u) => u.country))];
+    document.getElementById('universitiesList').innerHTML = list.length ? byCountry.map((c) =>
+      '<div style="margin-bottom:10px"><div class="phead"><div class="pname" style="font-size:13px;color:var(--acc)">' + esc(c) + '</div></div>' +
+      list.filter((u) => u.country === c).map((u) => {
+        const d = u.appDeadline ? Math.ceil((new Date(u.appDeadline) - new Date()) / 86400000) : null;
+        const pri = u.priority === 'A' ? 'crit' : u.priority === 'B' ? 'warn' : 'low';
+        return '<div class="item"><div class="dot ' + pri + '"></div><div class="txt">' +
+          '<div class="t">' + esc(u.name) + '</div><div class="d">' + esc(u.dept || '') + (u.scholarship ? ' · ' + esc(u.scholarship) : '') + (u.appDeadline ? ' · ' + esc(fmt(u.appDeadline)) + (d !== null ? ' (' + (d >= 0 ? d + 'd' : 'past') + ')' : '') : '') + '</div>' +
+          (u.notes ? '<div class="d">📌 ' + esc(u.notes) + '</div>' : '') +
+          '</div><select onchange="setUniversity(\'' + u.id + '\',this.value)" style="width:120px;padding:4px 6px;font-size:12px">' + UNI_ST.map((x) => '<option ' + (u.status === x ? 'selected' : '') + '>' + x + '</option>').join('') + '</select>' +
+          (u.url ? '<a href="' + esc(u.url) + '" target="_blank" style="font-size:14px">🔗</a>' : '') +
+          '<button onclick="delUniversity(\'' + u.id + '\')" style="background:none;border:none;color:var(--mut);font-size:14px">🗑️</button></div>';
+      }).join('') + '</div>').join('') : '<div class="empty">No universities yet</div>';
+  }).catch((e) => toast(e.message));
+}
+function addUniversity() {
+  const name = document.getElementById('uName').value.trim();
+  if (!name) return toast('Name required');
+  api('/api/universities', 'POST', {
+    name, country: document.getElementById('uCountry').value.trim(),
+    dept: document.getElementById('uDept').value.trim(),
+    appDeadline: document.getElementById('uDeadline').value || '',
+    priority: document.getElementById('uPri').value,
+  }).then(() => { ['uName', 'uCountry', 'uDept', 'uDeadline'].forEach((i) => { document.getElementById(i).value = ''; }); loadUniversities(); toast('Added'); }).catch((e) => toast(e.message));
+}
+function setUniversity(id, status) { api('/api/universities/' + id, 'PATCH', { status }).then(loadUniversities).catch((e) => toast(e.message)); }
+function delUniversity(id) { api('/api/universities/' + id, 'DELETE').then(loadUniversities).catch((e) => toast(e.message)); }
+
+function loadProfessors() {
+  api('/api/professors').then((o) => {
+    const list = o.professors || [];
+    document.getElementById('professorsList').innerHTML = list.length ? PROF_ST.map((st) => {
+      const items = list.filter((p) => p.status === st);
+      if (!items.length) return '';
+      return '<div style="margin-bottom:10px"><div class="phead"><div class="pname" style="font-size:13px;color:var(--acc)">' + st + ' (' + items.length + ')</div></div>' +
+        items.map((p) => '<div class="item"><div class="txt"><div class="t">' + esc(p.name || p.university) + '</div>' +
+          '<div class="d">' + esc(p.university) + (p.country ? ' · ' + esc(p.country) : '') + (p.field ? ' · ' + esc(p.field) : '') + '</div>' +
+          (p.email ? '<div class="d">✉ ' + esc(p.email) + '</div>' : '') +
+          (p.response ? '<div class="d" style="white-space:pre-wrap">↩ ' + esc(p.response) + '</div>' : '') +
+          '</div><select onchange="setProfessor(\'' + p.id + '\',this.value)" style="width:120px;padding:4px 6px;font-size:12px">' + PROF_ST.map((x) => '<option ' + (p.status === x ? 'selected' : '') + '>' + x + '</option>').join('') + '</select>' +
+          '<button onclick="delProfessor(\'' + p.id + '\')" style="background:none;border:none;color:var(--mut);font-size:14px">🗑️</button></div>').join('') + '</div>';
+    }).join('') : '<div class="empty">No professors yet</div>';
+  }).catch((e) => toast(e.message));
+}
+function addProfessor() {
+  const uni = document.getElementById('pUni').value.trim();
+  if (!uni) return toast('University required');
+  api('/api/professors', 'POST', {
+    name: document.getElementById('pName').value.trim(), university: uni,
+    country: document.getElementById('pCountry').value.trim(), field: document.getElementById('pField').value.trim(),
+  }).then(() => { ['pName', 'pUni', 'pCountry', 'pField'].forEach((i) => { document.getElementById(i).value = ''; }); loadProfessors(); toast('Added'); }).catch((e) => toast(e.message));
+}
+function setProfessor(id, status) { api('/api/professors/' + id, 'PATCH', { status }).then(loadProfessors).catch((e) => toast(e.message)); }
+function delProfessor(id) { api('/api/professors/' + id, 'DELETE').then(loadProfessors).catch((e) => toast(e.message)); }
+
+function loadCGPA() {
+  api('/api/cgpa').then((o) => {
+    CGPA_DATA = o.cgpa || { backlogs: [] };
+    const c = CGPA_DATA;
+    const baseQP = (c.cgpa || 0) * (c.completedCredits || 0);
+    const backlogBonus = (c.backlogs || []).filter((b) => b.done).reduce((s, b) => s + (b.newGrade || 0) * b.credits, 0);
+    const futureQP = (c.futureSems || []).reduce((s, f) => s + (f.gpa || 0) * f.credits, 0);
+    const totalCredits = (c.completedCredits || 0) + (c.futureSems || []).reduce((s, f) => s + (f.credits || 0), 0);
+    const effective = totalCredits > 0 ? (baseQP + backlogBonus + futureQP) / totalCredits : (c.cgpa || 0);
+    const pend = (c.backlogs || []).filter((b) => !b.done).reduce((s, b) => s + b.credits, 0);
+    const sim = totalCredits > 0 ? (baseQP + backlogBonus + pend * 3.75 + futureQP) / totalCredits : (c.cgpa || 0);
+    document.getElementById('cgpaStats').innerHTML = [
+      ['Current CGPA', (c.cgpa || 0).toFixed(2), 'warn'],
+      ['Projected (backlogs done)', effective.toFixed(3), effective >= 3.0 ? 'ok' : 'warn'],
+      ['If all backlogs 3.75', sim.toFixed(3), sim >= 3.0 ? 'ok' : 'warn'],
+      ['Target', (c.target || 0).toFixed(1), 'ok'],
+      ['GKS cutoff 2.64', (c.cgpa || 0) >= 2.64 ? 'QUALIFY' : 'below', (c.cgpa || 0) >= 2.64 ? 'ok' : 'crit'],
+    ].map(([l, n, cls]) => '<div class="stat ' + cls + '"><div class="n">' + n + '</div><div class="l">' + l + '</div></div>').join('');
+    document.getElementById('cgpaBacklogs').innerHTML = (c.backlogs || []).map((b, idx) =>
+      '<div class="item"><input type="checkbox" ' + (b.done ? 'checked' : '') + ' onchange="toggleBacklog(' + idx + ',this.checked)" style="accent-color:var(--acc)">' +
+      '<div class="txt"><div class="t">' + esc(b.course) + '</div><div class="d">' + b.credits + ' credits · was 0.00' +
+      (b.done ? ' · new grade: <input type="number" step="0.01" min="0" max="4" value="' + (b.newGrade || 0) + '" onchange="setBacklogGrade(' + idx + ',this.value)" style="width:60px;padding:2px 4px">' : '') + '</div></div></div>').join('') || '<div class="empty">No backlogs</div>';
+    document.getElementById('cgpaNotes').textContent = c.notes || '';
+  }).catch((e) => toast(e.message));
+}
+function toggleBacklog(idx, done) {
+  if (!CGPA_DATA.backlogs[idx]) return;
+  CGPA_DATA.backlogs[idx].done = done;
+  if (!done) CGPA_DATA.backlogs[idx].newGrade = 0;
+  saveCGPA();
+}
+function setBacklogGrade(idx, grade) {
+  if (!CGPA_DATA.backlogs[idx]) return;
+  CGPA_DATA.backlogs[idx].newGrade = parseFloat(grade) || 0;
+  saveCGPA();
+}
+function saveCGPA() { api('/api/cgpa', 'POST', CGPA_DATA).then(loadCGPA).catch((e) => toast(e.message)); }
+
+function loadNotes() {
+  api('/api/notes').then((o) => {
+    const notes = o.notes || [];
+    document.getElementById('notesList').innerHTML = notes.map((n) =>
+      '<div class="card" style="margin-bottom:12px"><h3 style="color:' + esc(n.color || 'var(--acc)') + '">' + esc(n.title || '') + '</h3>' +
+      ((n.entries || []).map((e) => '<div class="item"><div class="txt"><div class="t">' + esc(e.title || '') + '</div><div class="d" style="white-space:pre-wrap">' + esc(e.content || '') + '</div></div></div>').join('') || '<div class="empty">No entries</div>') +
+      '</div>').join('') || '<div class="empty">No notes</div>';
+  }).catch((e) => toast(e.message));
 }
 
 // ----- AI -----
