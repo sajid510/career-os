@@ -22,7 +22,17 @@ jobs:
         with:
           gradle-version: '8.5'
 
-      - name: Build release APK
+      - name: Restore signing keystore
+        run: |
+          mkdir -p keystore
+          echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > keystore/careeros.keystore
+
+      - name: Build signed release APK
+        env:
+          KEYSTORE_FILE: ${{ github.workspace }}/keystore/careeros.keystore
+          KEYSTORE_PASS: ${{ secrets.KEYSTORE_PASS }}
+          KEY_PASS: ${{ secrets.KEY_PASS }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
         run: gradle assembleRelease --no-daemon
 
       - name: Upload APK
@@ -30,3 +40,10 @@ jobs:
         with:
           name: career-os-apk
           path: app/build/outputs/apk/release/*.apk
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        if: startsWith(github.ref, 'refs/tags/')
+        with:
+          files: app/build/outputs/apk/release/*.apk
+          generate_release_notes: true
