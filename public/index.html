@@ -583,14 +583,16 @@ function loadClassroom() {
 function classroomConnect() {
   const id = document.getElementById('sClassroomId').value.trim();
   const sec = document.getElementById('sClassroomSecret').value.trim();
-  const doConnect = () => { window.location.href = '/api/classroom/auth'; };
+  const go = () => api('/api/classroom/start', 'POST').then((r) => {
+    window.location.href = '/api/classroom/auth?state=' + encodeURIComponent(r.state);
+  }).catch((e) => toast(e.message));
   if (id || sec) {
     const p = {};
     if (id) p.classroomClientId = id;
     if (sec) p.classroomClientSecret = sec;
-    api('/api/settings', 'POST', p).then(doConnect).catch((e) => toast(e.message));
+    api('/api/settings', 'POST', p).then(go).catch((e) => toast(e.message));
   } else {
-    doConnect();
+    go();
   }
 }
 function classroomSync() {

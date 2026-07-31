@@ -655,20 +655,37 @@ app.post('/api/settings', requireAuth, async (req, res) => {
 app.get('/api/classroom/status', requireAuth, async (req, res) => {
   res.json({ ok: true, classroom: await getClassroomStatus() });
 });
-app.get('/api/classroom/auth', requireAuth, async (req, res) => {
+app.post('/api/classroom/start', requireAuth, async (req, res) => {
   const s = await getSettings();
   if (!s.classroomClientId || !s.classroomClientSecret) {
     return res.status(400).json({ ok: false, error: 'Set the Google Classroom Client ID and Client secret in Settings first.' });
   }
-  const state = makeId('clr') + Math.random().toString(36).slice(2, 8);
+  const state = makeId('st') + Math.random().toString(36).slice(2, 8);
   await setDoc('oauth/state', { state, createdAt: nowIso() }, false);
-  res.redirect(buildAuthUrl(s, state));
+  res.json({ ok: true, state });
+});
+app.get('/api/classroom/auth', async (req, res) => {
+  try {
+    const st = await getDoc('oauth/state');
+    const age = st ? (Date.now() - new Date(st.createdAt).getTime()) : Infinity;
+    if (!st || st.state !== req.query.state || age > 10 * 60 * 1000) {
+      return res.status(401).json({ ok: false, error: 'unauthorized' });
+    }
+    const s = await getSettings();
+    if (!s.classroomClientId || !s.classroomClientSecret) {
+      return res.status(400).json({ ok: false, error: 'Classroom client not configured' });
+    }
+    res.redirect(buildAuthUrl(s, st.state));
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e.message });
+  }
 });
 app.get('/api/classroom/oauth_callback', async (req, res) => {
   try {
     if (req.query.error) return res.redirect('/?classroom=error:' + encodeURIComponent(req.query.error));
     const st = await getDoc('oauth/state');
-    if (!st || st.state !== req.query.state) return res.redirect('/?classroom=error:state_mismatch');
+    const age = st ? (Date.now() - new Date(st.createdAt).getTime()) : Infinity;
+    if (!st || st.state !== req.query.state || age > 10 * 60 * 1000) return res.redirect('/?classroom=error:state_mismatch');
     await deleteDoc('oauth/state');
     const s = await getSettings();
     const r = await fetch('https://oauth2.googleapis.com/token', {
