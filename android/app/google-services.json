@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "659514708699",
+    "project_id": "career-os-hub",
+    "storage_bucket": "career-os-hub.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:659514708699:android:3508fe5e36277600ab72fe",
+        "android_client_info": {
+          "package_name": "com.sadnan.careeros"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAhn6Hg_-X5XDwqAtjiyzjAlstekrmy0dc"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
