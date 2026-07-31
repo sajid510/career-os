@@ -1,0 +1,518 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#0b1220">
+<title>Career OS — Command Center</title>
+<style>
+:root{--bg:#0b1220;--panel:#111a2e;--panel2:#0f1626;--line:#1f2b47;--txt:#e6edf7;--mut:#8fa3c0;--acc:#38bdf8;--ok:#34d399;--warn:#fbbf24;--err:#f87171;--crit:#f87171;}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(--txt);min-height:100vh}
+.hidden{display:none!important}
+button{font-family:inherit;cursor:pointer}
+input,select,textarea{font-family:inherit;background:var(--panel2);color:var(--txt);border:1px solid var(--line);border-radius:8px;padding:9px 11px;font-size:14px;outline:none;width:100%}
+input:focus,select:focus,textarea:focus{border-color:var(--acc)}
+.btn{background:var(--acc);color:#04121f;border:none;border-radius:8px;padding:9px 16px;font-weight:600;font-size:14px}
+.btn.ghost{background:transparent;color:var(--acc);border:1px solid var(--acc)}
+.btn.warn{background:var(--warn);color:#1a1200}
+.btn:disabled{opacity:.5;cursor:default}
+a{color:var(--acc);text-decoration:none}
+
+/* login */
+#login{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px}
+.login-card{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:36px;width:100%;max-width:420px;text-align:center}
+.login-card h1{font-size:26px;margin-bottom:6px}
+.login-card p{color:var(--mut);margin-bottom:22px}
+.logo{font-size:40px;margin-bottom:8px}
+
+/* shell */
+#app{max-width:1180px;margin:0 auto;padding:14px}
+header{display:flex;align-items:center;gap:12px;padding:10px 4px 16px;flex-wrap:wrap}
+header .brand{display:flex;align-items:center;gap:10px}
+header .brand .dot{width:12px;height:12px;border-radius:50%;background:var(--acc);box-shadow:0 0 12px var(--acc)}
+header h1{font-size:20px}
+header .sub{color:var(--mut);font-size:12px}
+.spacer{flex:1}
+nav{display:flex;gap:6px;flex-wrap:wrap}
+nav button{background:transparent;border:1px solid transparent;color:var(--mut);padding:8px 13px;border-radius:9px;font-size:13.5px;font-weight:600}
+nav button.active{background:var(--panel);color:var(--acc);border-color:var(--line)}
+nav button .badge{background:var(--crit);color:#fff;border-radius:9px;padding:1px 6px;font-size:11px;margin-left:4px}
+
+section{animation:fade .2s ease}
+@keyframes fade{from{opacity:0;transform:translateY(4px)}to{opacity:1}}
+
+.grid{display:grid;gap:12px}
+.stat-grid{grid-template-columns:repeat(auto-fit,minmax(150px,1fr))}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px}
+.card h3{font-size:14px;color:var(--mut);text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px}
+.stat{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px}
+.stat .n{font-size:26px;font-weight:700}
+.stat .l{color:var(--mut);font-size:12px}
+.stat.crit .n{color:var(--crit)}.stat.ok .n{color:var(--ok)}.stat.warn .n{color:var(--warn)}
+
+.two{grid-template-columns:1fr 1fr}
+@media(max-width:800px){.two{grid-template-columns:1fr}}
+
+.item{display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--line)}
+.item:last-child{border-bottom:none}
+.item .dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+.dot.crit{background:var(--crit)}.dot.high{background:var(--warn)}.dot.med{background:var(--acc)}.dot.low{background:var(--mut)}.dot.done{background:var(--ok)}
+.item .txt{flex:1;min-width:0}
+.item .t{font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.item .d{font-size:12px;color:var(--mut)}
+.item .tag{font-size:11px;background:var(--panel2);border:1px solid var(--line);border-radius:6px;padding:2px 7px;color:var(--mut);white-space:nowrap}
+.tag.soon{color:var(--warn);border-color:var(--warn)}
+.tag.today{color:var(--crit);border-color:var(--crit)}
+
+.sys{display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--line)}
+.sys:last-child{border-bottom:none}
+.sys .ico{width:34px;height:34px;border-radius:9px;background:var(--panel2);border:1px solid var(--line);display:flex;align-items:center;justify-content:center;font-size:16px}
+.sys .st{width:10px;height:10px;border-radius:50%}
+.st.ok{background:var(--ok)}.st.err{background:var(--crit)}.st.unknown{background:var(--mut)}
+.sys .n{font-weight:600;font-size:13.5px}
+.sys .s{font-size:12px;color:var(--mut)}
+
+.notif{display:flex;gap:10px;padding:10px 0;border-bottom:1px solid var(--line)}
+.notif:last-child{border-bottom:none}
+.notif .ic{font-size:16px}
+.notif .t{font-size:13.5px;font-weight:600}
+.notif .b{font-size:12.5px;color:var(--mut);margin-top:2px}
+.notif .tm{font-size:11px;color:var(--mut);margin-top:3px}
+.notif.unread{border-left:3px solid var(--acc);padding-left:7px;border-radius:2px}
+
+.row{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px}
+.row>*{flex:1;min-width:140px}
+.row .grow{flex:3}
+
+.chat{height:420px;overflow-y:auto;padding:6px 2px;display:flex;flex-direction:column;gap:10px}
+.msg{max-width:82%;padding:10px 13px;border-radius:12px;font-size:14px;line-height:1.45;white-space:pre-wrap;word-break:break-word}
+.msg.user{align-self:flex-end;background:var(--acc);color:#04121f}
+.msg.ai{align-self:flex-start;background:var(--panel2);border:1px solid var(--line)}
+.msg.tool{align-self:center;font-size:11px;color:var(--mut);background:var(--panel);border:1px dashed var(--line);padding:4px 10px;border-radius:20px}
+.chat-inline{display:flex;gap:8px;margin-top:10px}
+.chat-inline input{flex:1}
+.typing{color:var(--mut);font-style:italic;font-size:13px;padding:8px}
+
+.pill{display:inline-block;font-size:11px;background:var(--panel2);border:1px solid var(--line);border-radius:20px;padding:3px 10px;color:var(--mut);margin:2px}
+.phase{border:1px solid var(--line);border-radius:10px;padding:12px;margin-bottom:10px;background:var(--panel2)}
+.phase.active{border-color:var(--acc)}
+.phase .phead{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
+.phase .pname{font-weight:700;font-size:14.5px}
+.phase .pstat{font-size:11px;color:var(--ok);border:1px solid var(--ok);border-radius:12px;padding:2px 9px}
+.phase .pstat.pending{color:var(--mut);border-color:var(--line)}
+
+.milestone{display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--line)}
+.milestone .cb{width:18px;height:18px;border-radius:6px;border:1.5px solid var(--acc);cursor:pointer;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:11px}
+.milestone.done .cb{background:var(--ok);border-color:var(--ok);color:#04121f}
+.milestone .t{flex:1}
+.milestone.done .t{text-decoration:line-through;color:var(--mut)}
+
+.tbl-row{display:flex;gap:8px;align-items:center;padding:8px 0;border-bottom:1px solid var(--line)}
+.tbl-row .t{flex:1;font-size:13.5px}
+.tbl-row select{width:130px;padding:5px 8px;font-size:12.5px}
+.tbl-row button{background:transparent;border:none;color:var(--mut);font-size:15px}
+
+.upload{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.upload input[type=file]{flex:1;min-width:200px}
+#ingestStatus{margin-top:10px;font-size:13px}
+.oktxt{color:var(--ok)}.errtxt{color:var(--err)}
+
+.settings-row{display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--line);gap:10px}
+.settings-row .l{font-size:13.5px;color:var(--mut)}
+.settings-row .v{font-size:13.5px;word-break:break-all}
+small{color:var(--mut)}
+.empty{color:var(--mut);font-size:13px;padding:14px 0;text-align:center}
+footer{color:var(--mut);font-size:11.5px;text-align:center;padding:26px 0 14px}
+</style>
+</head>
+<body>
+
+<div id="login">
+  <div class="login-card">
+    <div class="logo">🛰️</div>
+    <h1>Career OS</h1>
+    <p>Your all-in-one career command center. Enter your hub token to unlock all systems.</p>
+    <input id="loginToken" type="password" placeholder="Hub token" style="margin-bottom:12px">
+    <button class="btn" style="width:100%" onclick="doLogin()">Unlock</button>
+    <p style="margin-top:14px;font-size:12px;color:var(--mut)">First time? Run <code>/api/init</code> once to generate your token.</p>
+  </div>
+</div>
+
+<div id="app" class="hidden">
+  <header>
+    <div class="brand"><div class="dot"></div><div><h1>Career OS</h1><div class="sub">Command center · <span id="todayLabel"></span></div></div></div>
+    <div class="spacer"></div>
+    <nav>
+      <button data-tab="overview" class="active">Overview</button>
+      <button data-tab="tasks">Tasks</button>
+      <button data-tab="plan">Plan</button>
+      <button data-tab="schedule">Schedule</button>
+      <button data-tab="ai">AI Assistant</button>
+      <button data-tab="learning">Learning</button>
+      <button data-tab="settings">Settings</button>
+    </nav>
+    <button class="btn ghost" onclick="logout()" style="padding:6px 10px;font-size:12px">Sign out</button>
+  </header>
+
+  <!-- OVERVIEW -->
+  <section id="tab-overview">
+    <div class="grid stat-grid" id="stats" style="margin-bottom:12px"></div>
+    <div class="grid two">
+      <div class="card">
+        <h3>⚠️ Due today</h3>
+        <div id="dueToday"></div>
+      </div>
+      <div class="card">
+        <h3>📅 Next deadlines</h3>
+        <div id="nextDeadlines"></div>
+      </div>
+    </div>
+    <div class="grid two" style="margin-top:12px">
+      <div class="card">
+        <h3>🛰️ Connected systems</h3>
+        <div id="systems"></div>
+        <button class="btn ghost" style="width:100%;margin-top:10px" onclick="syncSystems()">Sync now</button>
+      </div>
+      <div class="card">
+        <h3>🔔 Recent notifications</h3>
+        <div id="notifications"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- TASKS -->
+  <section id="tab-tasks" class="hidden">
+    <div class="card" style="margin-bottom:12px">
+      <h3>➕ New task</h3>
+      <div class="row">
+        <input class="grow" id="tTitle" placeholder="Task title">
+        <input id="tDue" type="date">
+        <select id="tCat">
+          <option value="general">General</option><option value="academic">Academic</option><option value="research">Research</option>
+          <option value="outreach">Outreach</option><option value="scholarship">Scholarship</option><option value="documents">Documents</option>
+          <option value="language">Language</option><option value="presence">Presence</option><option value="milestone">Milestone</option>
+        </select>
+        <select id="tPri"><option value="medium">Med</option><option value="high">High</option><option value="critical">Critical</option><option value="low">Low</option></select>
+        <button class="btn" onclick="addTask()">Add</button>
+      </div>
+    </div>
+    <div class="card">
+      <h3>📋 All tasks</h3>
+      <div id="tasksList"></div>
+    </div>
+  </section>
+
+  <!-- PLAN -->
+  <section id="tab-plan" class="hidden">
+    <div class="grid two" style="margin-bottom:12px">
+      <div class="card">
+        <h3>🗺️ Phases</h3>
+        <div id="phases"></div>
+      </div>
+      <div class="card">
+        <h3>🏁 Milestones</h3>
+        <div id="milestones"></div>
+      </div>
+    </div>
+    <div class="card">
+      <h3>🤖 Regenerate plan from a career file</h3>
+      <p style="font-size:13px;color:var(--mut);margin-bottom:10px">Upload your career plan/path (markdown, txt, or docx content) and the AI will decompose it into phases, milestones, deadlines and tasks automatically.</p>
+      <div class="upload">
+        <input type="file" id="planFile" accept=".md,.txt,.markdown,.doc,.docx,.pdf">
+        <button class="btn" onclick="ingestPlan()">Analyze &amp; apply</button>
+      </div>
+      <div id="ingestStatus"></div>
+    </div>
+  </section>
+
+  <!-- SCHEDULE -->
+  <section id="tab-schedule" class="hidden">
+    <div class="card" style="margin-bottom:12px">
+      <h3>📌 Deadlines</h3>
+      <div id="deadlines"></div>
+    </div>
+    <div class="card" style="margin-bottom:12px">
+      <h3>⏰ Reminders (fire on your phone even offline)</h3>
+      <div class="row">
+        <input class="grow" id="rTitle" placeholder="Reminder title">
+        <input id="rBody" placeholder="Message (optional)">
+        <input id="rDue" type="datetime-local">
+        <select id="rLead"><option value="60">1h before</option><option value="1440">1d before</option><option value="10080">1w before</option><option value="0">On time</option></select>
+        <button class="btn" onclick="addReminder()">Add</button>
+      </div>
+      <div id="reminders"></div>
+    </div>
+  </section>
+
+  <!-- AI -->
+  <section id="tab-ai" class="hidden">
+    <div class="card">
+      <h3>🤖 Pulse — your career intelligence</h3>
+      <p style="font-size:12.5px;color:var(--mut);margin-bottom:8px">It knows your full profile, current plan, deadlines and what it has learned about you. Try: <em>"What should I focus on this week?"</em> or <em>"Add a reminder for IELTS registration"</em>.</p>
+      <div class="chat" id="chat"></div>
+      <div class="chat-inline">
+        <input id="chatInput" placeholder="Ask Pulse...">
+        <button class="btn" onclick="sendChat()">Send</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- LEARNING -->
+  <section id="tab-learning" class="hidden">
+    <div class="grid stat-grid" id="learnStats" style="margin-bottom:12px"></div>
+    <div class="grid two">
+      <div class="card"><h3>🧠 Learned facts about you</h3><div id="facts"></div></div>
+      <div class="card"><h3>📈 Learning events</h3><div id="learnEvents"></div></div>
+    </div>
+  </section>
+
+  <!-- SETTINGS -->
+  <section id="tab-settings" class="hidden">
+    <div class="card" style="margin-bottom:12px">
+      <h3>⚙️ Settings</h3>
+      <div class="row">
+        <input id="sGemini" placeholder="Gemini API key (only shown as set)">
+        <select id="sModel"><option value="gemini-2.5-flash">Gemini 2.5 Flash</option><option value="gemini-2.5-pro">Gemini 2.5 Pro</option></select>
+        <button class="btn" onclick="saveSettings()">Save</button>
+      </div>
+      <div class="settings-row"><div class="l">Owner email</div><div class="v" id="sEmail"></div></div>
+      <div class="settings-row"><div class="l">Gemini key</div><div class="v" id="sKeyState"></div></div>
+      <div class="settings-row"><div class="l">career-io webhook</div><div class="v" id="sCareer"></div></div>
+      <div class="settings-row"><div class="l">Hub token</div><div class="v" id="sToken"></div></div>
+    </div>
+    <div class="card">
+      <h3>🔗 Connectors</h3>
+      <div class="settings-row"><div class="l">career-intelligence-agent-os</div><div class="v"><button class="btn ghost" onclick="api('/api/systems/sync','POST',{scope:'light'}).then(()=>toast('Synced'))">Sync</button></div></div>
+      <div class="settings-row"><div class="l">robot-oda-dashboard</div><div class="v"><button class="btn ghost" onclick="api('/api/systems/sync','POST',{scope:'light'}).then(()=>toast('Synced'))">Sync</button></div></div>
+      <div class="settings-row"><div class="l">robowatch / EEE / news-pulse</div><div class="v"><small>Auto-synced by GitHub Actions</small></div></div>
+    </div>
+  </section>
+
+  <footer>Career OS · self-learning command center · runs on free infrastructure</footer>
+</div>
+
+<div id="toast" style="position:fixed;bottom:18px;left:50%;transform:translateX(-50%);background:var(--panel);border:1px solid var(--acc);border-radius:10px;padding:10px 18px;font-size:13.5px;display:none;z-index:99"></div>
+
+<script>
+const HUB = localStorage.getItem('hubToken') || '';
+function api(path, method, body) {
+  return fetch(path, {
+    method: method || 'GET',
+    headers: { 'Content-Type': 'application/json', 'x-hub-token': HUB },
+    body: body ? JSON.stringify(body) : undefined,
+  }).then(async (r) => {
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok && !j.ok) throw new Error(j.error || ('HTTP ' + r.status));
+    return j;
+  });
+}
+function toast(msg) { const t = document.getElementById('toast'); t.textContent = msg; t.style.display = 'block'; setTimeout(() => { t.style.display = 'none'; }, 2600); }
+function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
+function fmt(iso) { if (!iso) return ''; const d = new Date(iso); return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }) + (iso.length > 10 ? ' ' + d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }) : ''); }
+
+function doLogin() {
+  const t = document.getElementById('loginToken').value.trim();
+  if (!t) return toast('Enter a token');
+  localStorage.setItem('hubToken', t);
+  location.reload();
+}
+function logout() { localStorage.removeItem('hubToken'); location.reload(); }
+
+document.querySelectorAll('nav button').forEach((b) => b.addEventListener('click', () => {
+  document.querySelectorAll('nav button').forEach((x) => x.classList.remove('active'));
+  b.classList.add('active');
+  document.querySelectorAll('#app section').forEach((s) => s.classList.add('hidden'));
+  document.getElementById('tab-' + b.dataset.tab).classList.remove('hidden');
+  const tab = b.dataset.tab;
+  if (tab === 'overview') loadOverview();
+  if (tab === 'tasks') loadTasks();
+  if (tab === 'plan') loadPlan();
+  if (tab === 'schedule') loadSchedule();
+  if (tab === 'learning') loadLearning();
+  if (tab === 'settings') loadSettings();
+  if (tab === 'ai') document.getElementById('chatInput').focus();
+}));
+
+function init() {
+  if (!HUB) return;
+  document.getElementById('login').classList.add('hidden');
+  document.getElementById('app').classList.remove('hidden');
+  const d = new Date();
+  document.getElementById('todayLabel').textContent = d.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' });
+  loadOverview();
+}
+init();
+
+// ----- OVERVIEW -----
+function loadOverview() {
+  api('/api/overview').then((o) => {
+    document.getElementById('stats').innerHTML = [
+      ['Open tasks', o.stats.openTasks, o.stats.overdue ? 'crit' : 'ok'],
+      ['Due today', o.stats.dueToday, o.stats.dueToday ? 'warn' : 'ok'],
+      ['Overdue', o.stats.overdue, o.stats.overdue ? 'crit' : 'ok'],
+      ['Deadlines', o.stats.totalDeadlines, 'ok'],
+      ['Milestones', o.stats.milestonesDone + '/' + o.stats.milestonesTotal, 'warn'],
+      ['Unread', o.stats.unreadNotifications, o.stats.unreadNotifications ? 'warn' : 'ok'],
+    ].map(([l, n, cls]) => '<div class="stat ' + cls + '"><div class="n">' + n + '</div><div class="l">' + l + '</div></div>').join('');
+
+    document.getElementById('dueToday').innerHTML = o.dueTodayTasks.length
+      ? o.dueTodayTasks.map((t) => '<div class="item"><div class="dot ' + (t.priority === 'critical' ? 'crit' : 'high') + '"></div><div class="txt"><div class="t">' + esc(t.title) + '</div><div class="d">' + esc(t.category) + '</div></div></div>').join('')
+      : '<div class="empty">Nothing due today ✅</div>';
+
+    document.getElementById('nextDeadlines').innerHTML = o.nextDeadlines.length
+      ? o.nextDeadlines.map((d) => '<div class="item"><div class="dot ' + (d.critical ? 'crit' : 'med') + '"></div><div class="txt"><div class="t">' + esc(d.title) + '</div><div class="d">' + esc(d.date) + '</div></div><span class="tag ' + (d.human.startsWith('TODAY') || d.human.startsWith('tomorrow') ? 'soon' : '') + '">' + esc(d.human) + '</span></div>').join('')
+      : '<div class="empty">No upcoming deadlines</div>';
+
+    document.getElementById('systems').innerHTML = o.systems.length
+      ? o.systems.map((s) => '<div class="sys"><div class="st ' + (s.status === 'ok' ? 'ok' : 'err') + '"></div><div class="n">' + esc(s.name) + '</div><div class="s">' + esc(s.summary || s.status) + '</div></div>').join('')
+      : '<div class="empty">No systems synced yet</div>';
+
+    document.getElementById('notifications').innerHTML = o.notifications.length
+      ? o.notifications.map((n) => '<div class="notif ' + (n.read ? '' : 'unread') + '"><div class="ic">' + ic(n.type) + '</div><div><div class="t">' + esc(n.title) + '</div><div class="b">' + esc(n.body) + '</div><div class="tm">' + fmt(n.createdAt) + '</div></div></div>').join('')
+      : '<div class="empty">No notifications yet</div>';
+  }).catch((e) => toast('Overview: ' + e.message));
+}
+function ic(t) { return { deadline: '⏰', task: '✅', connector: '🔌', agent: '🤖', milestone: '🏁', reminder: '🔔', system: '🛰️' }[t] || '🔔'; }
+
+function syncSystems() { toast('Syncing connectors...'); api('/api/systems/sync', 'POST', { scope: 'light' }).then((r) => { toast('Synced'); loadOverview(); }).catch((e) => toast(e.message)); }
+
+// ----- TASKS -----
+function loadTasks() {
+  api('/api/tasks').then((o) => {
+    document.getElementById('tasksList').innerHTML = o.tasks.length
+      ? o.tasks.map((t) => '<div class="tbl-row"><button onclick="setTask(\'' + t.id + '\',\'done\')" title="Complete">✅</button><div class="t" style="' + (t.status === 'done' ? 'text-decoration:line-through;color:var(--mut)' : '') + '">' + esc(t.title) + ' <span class="tag">' + esc(t.category) + '</span>' + (t.dueAt ? ' <span class="tag ' + (t.human === 'TODAY' ? 'today' : t.human.startsWith('in 0') || t.human.startsWith('in 1') ? 'soon' : '') + '">' + esc(t.human) + '</span>' : '') + '</div><select onchange="setTask(\'' + t.id + '\',this.value)"><option value="open" ' + (t.status === 'open' ? 'selected' : '') + '>Open</option><option value="in_progress" ' + (t.status === 'in_progress' ? 'selected' : '') + '>In progress</option><option value="blocked" ' + (t.status === 'blocked' ? 'selected' : '') + '>Blocked</option><option value="done" ' + (t.status === 'done' ? 'selected' : '') + '>Done</option></select><button onclick="del(\'/api/tasks/\'+\'' + t.id + '\', loadTasks)" title="Delete">🗑️</button></div>').join('')
+      : '<div class="empty">No tasks yet</div>';
+  }).catch((e) => toast(e.message));
+}
+function addTask() {
+  const body = { title: document.getElementById('tTitle').value.trim(), dueAt: document.getElementById('tDue').value || '', category: document.getElementById('tCat').value, priority: document.getElementById('tPri').value };
+  if (!body.title) return toast('Enter a title');
+  api('/api/tasks', 'POST', body).then(() => { document.getElementById('tTitle').value = ''; loadTasks(); toast('Task added'); }).catch((e) => toast(e.message));
+}
+function setTask(id, status) {
+  api('/api/tasks/' + id, 'PATCH', { status }).then(() => loadTasks()).catch((e) => toast(e.message));
+}
+function del(path, after) { api(path, 'DELETE').then(after).catch((e) => toast(e.message)); }
+
+// ----- PLAN -----
+function loadPlan() {
+  Promise.all([api('/api/plan'), api('/api/phases')]).then(([p, ph]) => {
+    const phases = ph.phases || [];
+    document.getElementById('phases').innerHTML = phases.length
+      ? phases.map((x) => '<div class="phase ' + (x.status === 'active' ? 'active' : '') + '"><div class="phead"><div class="pname">' + esc(x.label || x.key) + '</div><div class="pstat ' + (x.status === 'active' ? '' : 'pending') + '">' + (x.status === 'active' ? '● ACTIVE' : 'PENDING') + '</div></div><div>' + (x.focus || []).map((f) => '<span class="pill">' + esc(f) + '</span>').join('') + '</div></div>').join('')
+      : '<div class="empty">No phases yet</div>';
+    const m = p.milestones || [];
+    document.getElementById('milestones').innerHTML = m.length
+      ? m.map((x) => '<div class="milestone ' + (x.status === 'done' ? 'done' : '') + '"><div class="cb" onclick="toggleMilestone(\'' + x.id + '\')">' + (x.status === 'done' ? '✓' : '') + '</div><div class="t">' + esc(x.title) + ' <span class="tag">' + esc(x.category) + '</span></div><span class="tag">' + esc(fmt(x.dueAt)) + '</span></div>').join('')
+      : '<div class="empty">No milestones yet</div>';
+    if (p.plan && p.plan.summary) document.getElementById('ingestStatus').innerHTML = '<div class="oktxt">Current strategy: ' + esc(p.plan.summary) + '</div>';
+  }).catch((e) => toast(e.message));
+}
+function toggleMilestone(id) { api('/api/milestones/' + id + '/toggle', 'POST').then(() => loadPlan()).catch((e) => toast(e.message)); }
+function ingestPlan() {
+  const f = document.getElementById('planFile').files[0];
+  if (!f) return toast('Choose a file first');
+  const reader = new FileReader();
+  reader.onload = () => {
+    const st = document.getElementById('ingestStatus');
+    st.innerHTML = '<div class="errtxt">Analyzing with AI... this takes ~20-40s</div>';
+    api('/api/plan/ingest', 'POST', { text: String(reader.result).slice(0, 60000) }).then((r) => {
+      st.innerHTML = '<div class="oktxt">✅ Plan applied — ' + r.applied.tasks + ' tasks, ' + r.applied.deadlines + ' deadlines, ' + r.applied.milestones + ' milestones. ' + esc(r.summary || '') + '</div>';
+      loadPlan();
+    }).catch((e) => { st.innerHTML = '<div class="errtxt">❌ ' + esc(e.message) + '</div>'; });
+  };
+  reader.readAsText(f);
+}
+
+// ----- SCHEDULE -----
+function loadSchedule() {
+  Promise.all([api('/api/deadlines'), api('/api/reminders')]).then(([d, r]) => {
+    document.getElementById('deadlines').innerHTML = d.deadlines.length
+      ? d.deadlines.map((x) => '<div class="item"><div class="dot ' + (x.critical ? 'crit' : 'med') + '"></div><div class="txt"><div class="t">' + esc(x.title) + '</div><div class="d">' + esc(x.date) + (x.notes ? ' · ' + esc(x.notes) : '') + '</div></div><span class="tag ' + (x.human === 'TODAY' ? 'today' : (x.human.startsWith('in 0') || x.human.startsWith('in 1') || x.human.startsWith('in 2') ? 'soon' : '')) + '">' + esc(x.human) + '</span><button style="background:none;border:none;color:var(--mut)" onclick="del(\'/api/deadlines/\'+\'' + x.id + '\', loadSchedule)">🗑️</button></div>').join('')
+      : '<div class="empty">No deadlines</div>';
+    document.getElementById('reminders').innerHTML = r.reminders.length
+      ? r.reminders.map((x) => '<div class="item"><div class="dot ' + (x.fired ? 'done' : 'low') + '"></div><div class="txt"><div class="t">' + esc(x.title) + '</div><div class="d">' + esc(x.body || '') + ' · fires ' + fmt(x.dueAt) + (x.fired ? ' · FIRED' : '') + '</div></div><button style="background:none;border:none;color:var(--mut)" onclick="del(\'/api/reminders/\'+\'' + x.id + '\', loadSchedule)">🗑️</button></div>').join('')
+      : '<div class="empty">No reminders</div>';
+  }).catch((e) => toast(e.message));
+}
+function addReminder() {
+  const due = document.getElementById('rDue').value;
+  if (!document.getElementById('rTitle').value.trim() || !due) return toast('Title + datetime required');
+  api('/api/reminders', 'POST', { title: document.getElementById('rTitle').value.trim(), body: document.getElementById('rBody').value, dueAt: new Date(due).toISOString(), leadMinutes: parseInt(document.getElementById('rLead').value, 10) }).then(() => { loadSchedule(); toast('Reminder scheduled (works offline)'); }).catch((e) => toast(e.message));
+}
+
+// ----- AI -----
+let chatBusy = false;
+function pushMsg(role, text) {
+  const chat = document.getElementById('chat');
+  const d = document.createElement('div');
+  d.className = 'msg ' + role;
+  d.textContent = text;
+  chat.appendChild(d);
+  chat.scrollTop = chat.scrollHeight;
+}
+function sendChat() {
+  if (chatBusy) return;
+  const inp = document.getElementById('chatInput');
+  const text = inp.value.trim();
+  if (!text) return;
+  inp.value = '';
+  pushMsg('user', text);
+  chatBusy = true;
+  const typing = document.createElement('div');
+  typing.className = 'typing';
+  typing.textContent = 'Pulse is thinking...';
+  document.getElementById('chat').appendChild(typing);
+  api('/api/chat', 'POST', { messages: [{ role: 'user', content: text }] }).then((r) => {
+    typing.remove();
+    if (r.toolLog && r.toolLog.length) {
+      const tl = document.createElement('div');
+      tl.className = 'msg tool';
+      tl.textContent = '⚙️ ' + r.toolLog.map((t) => t.name).join(' → ');
+      document.getElementById('chat').appendChild(tl);
+    }
+    pushMsg('ai', r.text || '(no response)');
+  }).catch((e) => { typing.remove(); pushMsg('ai', '⚠️ ' + e.message); }).finally(() => { chatBusy = false; });
+}
+document.getElementById('chatInput').addEventListener('keydown', (e) => { if (e.key === 'Enter') sendChat(); });
+
+// ----- LEARNING -----
+function loadLearning() {
+  api('/api/learning').then((o) => {
+    document.getElementById('learnStats').innerHTML = [
+      ['Task outcomes', o.stats.taskOutcomes || 0, 'ok'],
+      ['Feedback', o.stats.feedbackCount || 0, 'ok'],
+      ['Corrections', o.stats.corrections || 0, 'warn'],
+      ['Learned facts', o.facts.length, 'ok'],
+    ].map(([l, n, cls]) => '<div class="stat ' + cls + '"><div class="n">' + n + '</div><div class="l">' + l + '</div></div>').join('');
+    document.getElementById('facts').innerHTML = o.facts.length
+      ? o.facts.map((f) => '<div class="item"><div class="dot med"></div><div class="txt"><div class="t">' + esc(f.fact) + '</div><div class="d">strength ' + (f.strength || 3) + ' · ' + esc(f.source) + '</div></div></div>').join('')
+      : '<div class="empty">No learned facts yet — use the AI and complete tasks to teach me.</div>';
+    document.getElementById('learnEvents').innerHTML = o.events.length
+      ? o.events.map((e) => '<div class="item"><div class="txt"><div class="t">' + esc(e.text) + '</div><div class="d">' + fmt(e.ts) + (e.rating ? ' · rated ' + e.rating + '/5' : '') + '</div></div></div>').join('')
+      : '<div class="empty">No events yet</div>';
+  }).catch((e) => toast(e.message));
+}
+
+// ----- SETTINGS -----
+function loadSettings() {
+  api('/api/settings').then((o) => {
+    const s = o.settings;
+    document.getElementById('sEmail').textContent = s.ownerEmail || '';
+    document.getElementById('sKeyState').textContent = localStorage.getItem('geminiSet') === '1' ? 'configured' : (s.careerIoWebhook ? 'check settings' : '');
+    document.getElementById('sCareer').textContent = s.careerIoWebhook ? 'configured' : 'not configured';
+    document.getElementById('sToken').textContent = localStorage.getItem('hubToken');
+    document.getElementById('sModel').value = s.geminiModel || 'gemini-2.5-flash';
+  }).catch((e) => toast(e.message));
+}
+function saveSettings() {
+  const gemini = document.getElementById('sGemini').value.trim();
+  const model = document.getElementById('sModel').value;
+  const body = { geminiModel: model };
+  if (gemini) body.geminiKey = gemini;
+  api('/api/settings', 'POST', body).then((r) => { document.getElementById('sGemini').value = ''; localStorage.setItem('geminiSet', r.geminiKeySet ? '1' : '0'); loadSettings(); toast('Saved' + (r.geminiKeySet ? ' — AI active' : '')); }).catch((e) => toast(e.message));
+}
+</script>
+</body>
+</html>

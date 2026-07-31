@@ -1,0 +1,93 @@
+const PROFILE = {
+  name: 'Sadnan Jonayet Sajid',
+  headline: 'Robotics & Embedded AI Researcher | ROS2 | SLAM | Sensor Fusion | Autonomous Navigation',
+  email: 'sadnansajid355@gmail.com',
+  phone: '+880 1604-816949',
+  location: 'Dhaka, Bangladesh',
+  github: 'sajid510',
+  portfolio: 'sajid510.github.io',
+  linkedin: 'linkedin.com/in/sadnan-sajid',
+  education: {
+    school: 'University of Asia Pacific (UAP), Dhaka',
+    degree: 'B.Sc. Electrical & Electronic Engineering',
+    years: 'Jan 2024 - Dec 2027 (Expected)',
+    cgpa: '2.68 (needs recovery; target 3.0+)',
+    focus: 'Embedded Systems, Signal Processing, Control Systems, Applied AI',
+  },
+  researchInterests: [
+    'Simultaneous Localization & Mapping (SLAM)',
+    'Multi-sensor fusion (LiDAR + IMU + RGB-D)',
+    'Edge AI for autonomous systems (TensorRT, YOLOv11)',
+    'AI-integrated automation & agentic workflows',
+  ],
+  currentResearch: {
+    title: 'Autonomous Mobile Robot Navigation via ROS2-Based SLAM and AI-Enhanced Decision-Making',
+    team: 'Team Lead, 3-member robotics research group at UAP',
+    stack: 'ROS2, Nav2, SLAM Toolbox, Jetson Nano, LiDAR, Kinect RGB-D, Arduino Mega, Zenoh, Tailscale',
+    status: 'Hardware integration phase; manuscript in preparation targeting IEEE conference/journal',
+    paperDeadline: 'Primary: submit Paper #1 by September 2026 (target ICCAS/URAI/ROBIO)',
+  },
+  skills: [
+    'ROS2, Nav2, SLAM Toolbox, Zenoh, Gazebo, TF2, RViz2, micro-ROS',
+    'NVIDIA Jetson Nano, Arduino Mega, Raspberry Pi, LiDAR, Kinect RGB-D, C/C++, TensorRT, I2C/SPI/UART',
+    'Python, PyTorch, OpenCV, YOLOv11, LangChain, LoRA/PEFT, RAG, ChromaDB',
+    'Gemini API, Groq API, Firebase, n8n, Google Apps Script',
+    'Git/GitHub, GitHub Actions, Docker, Linux/Ubuntu, LaTeX/Overleaf',
+    'Project Management, Team Leadership, Stakeholder Coordination',
+  ],
+  experience: [
+    {
+      org: 'Golden Power Engineering',
+      role: 'Project Manager (Assistant -> Sales Executive -> Junior Marketing Officer -> Project Manager)',
+      years: 'Jan 2023 - Feb 2025',
+      details: 'Managed industrial power projects (3-phase generators, substations, high-voltage distribution); launched IT product sales channel; led cross-functional teams.',
+    },
+    {
+      org: 'Family Agribusiness (Poultry & Feed)',
+      role: 'Operations Lead',
+      years: 'Jun 2020 - Dec 2022',
+      details: 'Ran supply chain, procurement, B2B/B2C distribution through COVID-19; restructured vendor relationships.',
+    },
+  ],
+  achievements: [
+    'Champion - IEEE WiE BD Summit 2024 (Robotics for Climate Change)',
+    '5th Place - IEEE Region 10 Robotics Competition',
+    '11th Place - 6th Kibo Robot Programming Challenge (JAXA-affiliated)',
+  ],
+  leadership: [
+    'Team Leader, Autonomous Robotics Research Group, UAP (2024-Present)',
+    'Membership Development Coordinator, IEEE Student Branch, UAP',
+    'Associate, Project Coordination Team, UAP EEE Project Club',
+    'IEEE Student Member',
+  ],
+  languages: ['English (Professional Working)', 'Bengali (Native/Bilingual)'],
+  careerGoal:
+    'Fully funded MSc or Research Assistantship (2027-28 intake) in Robotics, Autonomous Systems, or Embedded AI.',
+  countryTargets: ['Japan (MEXT)', 'Germany (DAAD)', 'South Korea (GKS)', 'Canada (RA)', 'USA (RA)', 'Australia (AAS)'],
+  priorityOrder: [
+    'Apply Japan MEXT in March 2027 (embassy track + university recommendation)',
+    'Activate Canada RA professor contacts January 2027 (Mitacs Globalink 2026)',
+    'Submit Germany DAAD Helmut-Schmidt October 2027 (2028 intake)',
+    'Australia AAS as safety net (Feb-Apr 2027)',
+    'US RA route applications Sept-Dec 2027',
+    'Chevening UK October 2026 (one long-shot application)',
+  ],
+  criticalPath: [
+    'IELTS Academic 7.0+ by June 2026',
+    'Paper #1 submitted by September 2026 (hard deadline)',
+    'GRE Aug/Sep 2026 if pursuing USA',
+    'SOP full draft by October 2026',
+    'CGPA recovery: 3.2-3.7/semester through graduation (strong upward trend story)',
+    'JLPT N5 by July 2027, German A2 by Dec 2027',
+    'Professor outreach full launch January 2027 (10 JP + 5 DE + 5 CA + 8-10 US)',
+  ],
+  operatingPrinciples: [
+    'I value consistent small wins over occasional big swings.',
+    'I have a 2.68 CGPA; my strategy is achievements + paper + recommendations to compensate, so never let my low GPA demotivate the plan.',
+    'Everything must run on free infrastructure.',
+    'I am based in Dhaka (UTC+6), studying EEE at UAP, graduating December 2027.',
+    'I want proactive nudges about deadlines and milestones, not just passive lists.',
+  ],
+};
+
+module.exports = { PROFILE };

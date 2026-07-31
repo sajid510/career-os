@@ -1,0 +1,29 @@
+name: scheduler
+on:
+  schedule:
+    - cron: '*/30 * * * *'
+    - cron: '0 1 * * *'
+    - cron: '0 3 * * 0'
+    - cron: '0 4 1 * *'
+  workflow_dispatch:
+    inputs:
+      target:
+        description: 'Which job to run (15min, daily, weekly, monthly, all)'
+        default: 'all'
+        required: false
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Run scheduler
+        env:
+          HUB_URL: 'https://career-os-hub.web.app'
+          HUB_TOKEN: ${{ secrets.HUB_TOKEN }}
+          TRIGGER_SCHEDULE: ${{ github.event.schedule }}
+          TARGET: ${{ inputs.target }}
+        run: node .github/scheduler.mjs
