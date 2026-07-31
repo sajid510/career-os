@@ -5,6 +5,9 @@ import androidx.work.ExistingPeriodicWorkPolicy
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import com.google.firebase.messaging.FirebaseMessaging
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import java.util.concurrent.TimeUnit
 
 class CareOsApp : Application() {
@@ -23,10 +26,12 @@ class CareOsApp : Application() {
 
         // Register this device for push notifications
         FirebaseMessaging.getInstance().token.addOnSuccessListener { token ->
-            try {
-                HubApi(this).registerDevice(token)
-            } catch (e: Exception) {
-                // ignored - registered again on next token/launch
+            CoroutineScope(Dispatchers.IO).launch {
+                try {
+                    HubApi(this@CareOsApp).registerDevice(token)
+                } catch (e: Exception) {
+                    // ignored - registered again on next token/launch
+                }
             }
         }
     }
