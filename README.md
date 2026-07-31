@@ -6,6 +6,28 @@
 
 ---
 
+## 📸 Screenshots
+
+**Web dashboard** (desktop)
+
+| Overview | Tasks | Mission — Scholarships |
+| --- | --- | --- |
+| ![Overview](docs/screenshots/dashboard-overview.png) | ![Tasks](docs/screenshots/dashboard-tasks.png) | ![Mission](docs/screenshots/dashboard-mission.png) |
+
+| Plan | Classes (routine) | Mission — Universities |
+| --- | --- | --- |
+| ![Plan](docs/screenshots/dashboard-plan.png) | ![Classes](docs/screenshots/dashboard-classes.png) | ![Universities](docs/screenshots/dashboard-mission-universities.png) |
+
+**Android app** (WebView — phone viewport)
+
+| Overview | Classes | Mission |
+| --- | --- | --- |
+| ![App overview](docs/screenshots/app-overview.png) | ![App classes](docs/screenshots/app-classes.png) | ![App mission](docs/screenshots/app-mission.png) |
+
+*More views: [Schedule](docs/screenshots/dashboard-schedule.png), [AI Assistant](docs/screenshots/dashboard-ai.png), [Learning](docs/screenshots/dashboard-learning.png), [Settings](docs/screenshots/dashboard-settings.png), [CGPA](docs/screenshots/dashboard-mission-cgpa.png), [Professors](docs/screenshots/dashboard-mission-professors.png)*
+
+---
+
 ## ✨ What it does
 
 | Feature | Details |
