@@ -181,7 +181,7 @@ async function executeTool(name, args) {
       const doc = await getDoc('tasks/' + args.taskId);
       if (!doc) return { error: 'task not found' };
       await setDoc('tasks/' + args.taskId, { status: 'done', completedAt: nowIso(), outcome: args.outcome || '', rating: args.rating || 0 });
-      await addDoc('learning/events', { ts: nowIso(), type: 'task_outcome', entity: 'task', entityId: args.taskId, text: 'Completed: ' + doc.title + ' | Outcome: ' + (args.outcome || '') , rating: args.rating || 0 });
+      await addDoc('learning_events', { ts: nowIso(), type: 'task_outcome', entity: 'task', entityId: args.taskId, text: 'Completed: ' + doc.title + ' | Outcome: ' + (args.outcome || '') , rating: args.rating || 0 });
       await bumpStats();
       return { ok: true };
     }
@@ -236,12 +236,12 @@ async function executeTool(name, args) {
     }
     case 'get_learning_stats': {
       const stats = await getDoc('learning/stats');
-      const facts = await listDocs('learning/facts');
-      const events = await listDocs('learning/events');
+      const facts = await listDocs('learning_facts');
+      const events = await listDocs('learning_events');
       return { stats: stats || { taskOutcomes: 0, feedbackCount: 0, corrections: 0 }, facts: facts.map((f) => ({ fact: f.fact, strength: f.strength, source: f.source })).slice(0, 20), recentEvents: events.slice(-10).map((e) => e.text) };
     }
     case 'record_fact': {
-      await addDoc('learning/facts', { fact: args.fact, strength: args.strength || 3, source: 'agent', createdAt: nowIso() });
+      await addDoc('learning_facts', { fact: args.fact, strength: args.strength || 3, source: 'agent', createdAt: nowIso() });
       await bumpStats();
       return { ok: true };
     }
@@ -277,8 +277,8 @@ async function bumpStats() {
 // ---------------- SYSTEM PROMPT ----------------
 
 async function buildSystemPrompt() {
-  const facts = await listDocs('learning/facts');
-  const events = await listDocs('learning/events');
+  const facts = await listDocs('learning_facts');
+  const events = await listDocs('learning_events');
   const deadlines = await listDocs('deadlines');
   const milestones = await listDocs('milestones');
   const tasks = await listDocs('tasks');

@@ -249,8 +249,8 @@ async function agentChat(userMessages) {
 
 // ---------- learning refinement ----------
 async function refineLearning() {
-  const events = await listDocs('learning/events');
-  const facts = await listDocs('learning/facts');
+  const events = await listDocs('learning_events');
+  const facts = await listDocs('learning_facts');
   if (!events.length && !facts.length) return { ok: true, note: 'nothing to refine yet' };
   const s = await getSettings();
   if (!s.geminiKey) return { ok: true, note: 'no gemini key' };
@@ -269,8 +269,8 @@ async function refineLearning() {
     const textOut = data.candidates && data.candidates[0] ? data.candidates[0].content.parts.map((p) => p.text || '').join('') : '';
     const cleaned = textOut.replace(/```json/gi, '').replace(/```/g, '').trim();
     const arr = JSON.parse(cleaned.slice(cleaned.indexOf('['), cleaned.lastIndexOf(']') + 1));
-    await db.collection('learning/facts').get().then((snap) => { const ops = []; snap.forEach((d) => ops.push(d.ref.delete())); return Promise.all(ops); });
-    for (const f of arr) await addDoc('learning/facts', { fact: f.fact, strength: f.strength || 3, source: 'auto-refine', createdAt: nowIso() });
+    await db.collection('learning_facts').get().then((snap) => { const ops = []; snap.forEach((d) => ops.push(d.ref.delete())); return Promise.all(ops); });
+    for (const f of arr) await addDoc('learning_facts', { fact: f.fact, strength: f.strength || 3, source: 'auto-refine', createdAt: nowIso() });
     return { ok: true, facts: arr.length };
   } catch (e) {
     return { ok: true, note: 'refine skipped: ' + e.message };
@@ -404,7 +404,7 @@ app.post('/api/tasks/:id/complete', requireAuth, async (req, res) => {
   const outcome = req.body.outcome || '';
   const rating = req.body.rating || 0;
   await setDoc('tasks/' + id, { status: 'done', completedAt: nowIso(), outcome, rating });
-  await addDoc('learning/events', { ts: nowIso(), type: 'task_outcome', entity: 'task', entityId: id, text: 'Completed: ' + doc.title + (outcome ? ' | ' + outcome : ''), rating });
+  await addDoc('learning_events', { ts: nowIso(), type: 'task_outcome', entity: 'task', entityId: id, text: 'Completed: ' + doc.title + (outcome ? ' | ' + outcome : ''), rating });
   res.json({ ok: true });
 });
 app.delete('/api/tasks/:id', requireAuth, async (req, res) => {
@@ -521,7 +521,7 @@ app.post('/api/chat', requireAuth, async (req, res) => {
 
 // ---- feedback (self-learning) ----
 app.post('/api/feedback', requireAuth, async (req, res) => {
-  const rec = await addDoc('learning/events', {
+  const rec = await addDoc('learning_events', {
     ts: nowIso(), type: 'feedback', entity: req.body.entity || 'general', entityId: req.body.entityId || '',
     text: req.body.text || '', rating: req.body.rating || 0, correction: req.body.correction || '',
   });
@@ -540,8 +540,8 @@ app.post('/api/feedback', requireAuth, async (req, res) => {
 // ---- learning ----
 app.get('/api/learning', requireAuth, async (req, res) => {
   const stats = await getDoc('learning/stats');
-  const facts = await listDocs('learning/facts');
-  const events = await listDocs('learning/events');
+  const facts = await listDocs('learning_facts');
+  const events = await listDocs('learning_events');
   res.json({
     ok: true,
     stats: stats || {},
@@ -635,7 +635,7 @@ app.post('/api/cron/weekly', requireAuth, async (req, res) => {
   try {
     const connectors = await syncAll('full');
     const tasks = await listDocs('tasks');
-    const events = await listDocs('learning/events');
+    const events = await listDocs('learning_events');
     const completed = tasks.filter((t) => t.status === 'done' && t.completedAt && daysUntil(t.completedAt) >= -7);
     await notify('Weekly review', 'This week: ' + completed.length + ' task' + (completed.length === 1 ? '' : 's') + ' completed. Systems synced: ' + Object.keys(connectors).join(', ') + '.', 'agent', 'info', { source: 'weekly' });
     res.json({ ok: true, completed: completed.length, connectors });

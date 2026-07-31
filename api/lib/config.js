@@ -29,7 +29,13 @@ const DEFAULTS = {
 
 async function getSettings() {
   const s = await getDoc(SETTINGS_PATH);
-  return Object.assign({}, DEFAULTS, s || {});
+  const clean = {};
+  if (s) {
+    Object.keys(s).forEach((k) => {
+      if (s[k] !== '' && s[k] !== null && s[k] !== undefined) clean[k] = s[k];
+    });
+  }
+  return Object.assign({}, DEFAULTS, clean);
 }
 
 async function saveSettings(patch) {
