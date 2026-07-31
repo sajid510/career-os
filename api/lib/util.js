@@ -2,11 +2,11 @@ const admin = require('firebase-admin');
 
 if (!admin.apps.length) {
   const sa = process.env.FIREBASE_SERVICE_ACCOUNT;
+  const opts = { projectId: 'career-os-hub' };
   if (sa) {
-    admin.initializeApp({ credential: admin.credential.cert(JSON.parse(sa)) });
-  } else {
-    admin.initializeApp();
+    opts.credential = admin.credential.cert(JSON.parse(sa));
   }
+  admin.initializeApp(opts);
 }
 const db = admin.firestore();
 
