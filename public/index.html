@@ -273,7 +273,7 @@ footer{color:var(--mut);font-size:11.5px;text-align:center;padding:26px 0 14px}
       <h3>⚙️ Settings</h3>
       <div class="row">
         <input id="sGemini" placeholder="Gemini API key (only shown as set)">
-        <select id="sModel"><option value="gemini-2.5-flash">Gemini 2.5 Flash</option><option value="gemini-2.5-pro">Gemini 2.5 Pro</option></select>
+        <select id="sModel"><option value="gemini-flash-latest">Gemini Flash Latest (recommended)</option><option value="gemini-3.6-flash">Gemini 3.6 Flash</option><option value="gemini-3.1-flash-lite">Gemini 3.1 Flash Lite</option><option value="gemini-3-pro-preview">Gemini 3 Pro</option><option value="gemini-2.5-pro">Gemini 2.5 Pro (legacy)</option></select>
         <button class="btn" onclick="saveSettings()">Save</button>
       </div>
       <div class="settings-row"><div class="l">Owner email</div><div class="v" id="sEmail"></div></div>
@@ -503,7 +503,7 @@ function loadSettings() {
     document.getElementById('sKeyState').textContent = localStorage.getItem('geminiSet') === '1' ? 'configured' : (s.careerIoWebhook ? 'check settings' : '');
     document.getElementById('sCareer').textContent = s.careerIoWebhook ? 'configured' : 'not configured';
     document.getElementById('sToken').textContent = localStorage.getItem('hubToken');
-    document.getElementById('sModel').value = s.geminiModel || 'gemini-2.5-flash';
+    document.getElementById('sModel').value = s.geminiModel || 'gemini-flash-latest';
   }).catch((e) => toast(e.message));
 }
 function saveSettings() {

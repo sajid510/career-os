@@ -9,7 +9,7 @@ const DEFAULTS = {
   ownerPhone: '+880 1604-816949',
   hubToken: '',
   geminiKey: process.env.GEMINI_API_KEY || '',
-  geminiModel: 'gemini-2.5-flash',
+  geminiModel: 'gemini-flash-latest',
   careerIoWebhook: '',
   careerIoSecret: '',
   robotDbUrl: 'https://robot-oda-dashboard-default-rtdb.firebaseio.com',

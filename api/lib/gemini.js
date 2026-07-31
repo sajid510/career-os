@@ -10,7 +10,7 @@ const GEMINI_URL = 'https://generativelanguage.googleapis.com/v1beta/models';
 
 async function getModel() {
   const s = await getSettings();
-  return s.geminiModel || 'gemini-2.5-flash';
+  return s.geminiModel || 'gemini-flash-latest';
 }
 
 async function callGemini(systemPrompt, contents, tools) {

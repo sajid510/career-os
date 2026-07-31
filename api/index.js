@@ -154,7 +154,7 @@ async function decomposePlanText(text, graduationDate) {
     '}\n' +
     'Use concrete realistic dates (today is ' + toLocalDateStr(new Date().toISOString()) + '). Backwards milestones and deadlines from the stated goal. Graduation/target: ' + (graduationDate || 'unknown') + '.\n' +
     'PLAN TEXT:\n' + text.slice(0, 60000);
-  const resp = await fetch('https://generativelanguage.googleapis.com/v1beta/models/' + (s.geminiModel || 'gemini-2.5-flash') + ':generateContent?key=' + encodeURIComponent(key), {
+  const resp = await fetch('https://generativelanguage.googleapis.com/v1beta/models/' + (s.geminiModel || 'gemini-flash-latest') + ':generateContent?key=' + encodeURIComponent(key), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ contents: [{ role: 'user', parts: [{ text: prompt }] }] }),
@@ -260,7 +260,7 @@ async function refineLearning() {
     'You are the self-learning module of Sadnan OS. From the user\'s learning events and existing facts, distill at most 10 concise, durable facts about how Sadnan works best (preferences, habits, strengths, what to remind him about). Output STRICT JSON array only, e.g. [{"fact":"...","strength":4}]. No markdown.\n' +
     'EXISTING FACTS:\n' + existing + '\nLEARNING EVENTS:\n' + sample;
   try {
-    const resp = await fetch('https://generativelanguage.googleapis.com/v1beta/models/' + (s.geminiModel || 'gemini-2.5-flash') + ':generateContent?key=' + encodeURIComponent(s.geminiKey), {
+    const resp = await fetch('https://generativelanguage.googleapis.com/v1beta/models/' + (s.geminiModel || 'gemini-flash-latest') + ':generateContent?key=' + encodeURIComponent(s.geminiKey), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ contents: [{ role: 'user', parts: [{ text: prompt }] }] }),
