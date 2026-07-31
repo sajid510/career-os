@@ -2,9 +2,10 @@ const { PROFILE } = require('./profile');
 const { DEADLINES, PHASES, MILESTONES } = require('./seed');
 const {
   db, nowIso, makeId, getDoc, setDoc, addDoc, listDocs, queryDocs, deleteDoc,
-  daysUntil, inDays, humanDate, toLocalDateStr, addDaysLocal,
+  daysUntil, inDays, humanDate, toLocalDateStr, addDaysLocal, dhakaParts, DAY_SHORT,
 } = require('./util');
 const { getSettings } = require('./config');
+const { ensureClassReminders, ensureDeadlineReminders } = require('./reminders');
 
 const GEMINI_URL = 'https://generativelanguage.googleapis.com/v1beta/models';
 
@@ -150,6 +151,34 @@ const TOOL_DEFS = [
     description: 'Add or update a career goal.',
     parameters: { type: 'OBJECT', properties: { goal: { type: 'string' }, by: { type: 'string' } }, required: ['goal'] },
   },
+  {
+    name: 'list_schedule',
+    description: 'List the weekly class schedule (day, times, room, teacher).',
+    parameters: { type: 'OBJECT', properties: {} },
+  },
+  {
+    name: 'add_class',
+    description: 'Add a weekly class to the class routine. A 15-minute-before offline reminder is scheduled automatically for every occurrence.',
+    parameters: { type: 'OBJECT', properties: {
+      title: { type: 'string', description: 'Course name or code' }, course: { type: 'string' },
+      dayOfWeek: { type: 'integer', description: '0=Sunday ... 6=Saturday' },
+      startTime: { type: 'string', description: 'HH:MM (24h)' }, endTime: { type: 'string', description: 'HH:MM (24h)' },
+      room: { type: 'string' }, teacher: { type: 'string' },
+    }, required: ['title', 'dayOfWeek', 'startTime'] },
+  },
+  {
+    name: 'add_test',
+    description: 'Add a class test / exam deadline. A 24-hours-before offline reminder is scheduled automatically.',
+    parameters: { type: 'OBJECT', properties: {
+      title: { type: 'string' }, dueAt: { type: 'string', description: 'ISO datetime (YYYY-MM-DDTHH:mm)' },
+      course: { type: 'string' }, notes: { type: 'string' },
+    }, required: ['title', 'dueAt'] },
+  },
+  {
+    name: 'get_classroom_status',
+    description: 'Get Google Classroom connection status and last sync result.',
+    parameters: { type: 'OBJECT', properties: {} },
+  },
 ];
 
 async function executeTool(name, args) {
@@ -219,6 +248,12 @@ async function executeTool(name, args) {
       const today = toLocalDateStr(now.toISOString());
       const tasks = await listDocs('tasks');
       const deadlines = await listDocs('deadlines');
+      const schedule = await listDocs('schedule');
+      const todayDow = dhakaParts(Date.now()).dow;
+      const todayClasses = schedule
+        .filter((e) => e.enabled !== false && e.dayOfWeek === todayDow)
+        .sort((a, b) => (a.startTime || '').localeCompare(b.startTime || ''))
+        .map((e) => ({ title: e.title, time: e.startTime + (e.endTime ? '-' + e.endTime : ''), room: e.room || '' }));
       const dueTasks = tasks.filter((t) => t.status !== 'done' && t.dueAt && toLocalDateStr(t.dueAt) <= today).slice(0, 15);
       const upcomingDeadlines = deadlines.filter((d) => d.dueAt && daysUntil(d.dueAt) >= 0 && daysUntil(d.dueAt) <= 90).sort((a, b) => a.dueAt.localeCompare(b.dueAt)).slice(0, 15);
       return {
@@ -227,6 +262,7 @@ async function executeTool(name, args) {
         year: year,
         activePhase: activePhase ? activePhase.label : 'none',
         todayFocus: activePhase ? activePhase.focus : [],
+        todayClasses: todayClasses,
         dueTasks: dueTasks.map((t) => ({ id: t.id, title: t.title })),
         deadlineCountdowns: upcomingDeadlines.map((d) => ({ title: d.title, human: inDays(d.dueAt), critical: !!d.critical })),
       };
@@ -261,6 +297,36 @@ async function executeTool(name, args) {
       const rec = await addDoc('goals', { goal: args.goal, by: args.by || '', status: 'active', createdAt: nowIso() });
       return { ok: true, goal: rec };
     }
+    case 'list_schedule': {
+      const items = await listDocs('schedule');
+      items.sort((a, b) => (a.dayOfWeek - b.dayOfWeek) || (a.startTime || '').localeCompare(b.startTime || ''));
+      return { schedule: items.map((x) => ({
+        day: DAY_SHORT[x.dayOfWeek], time: x.startTime + (x.endTime ? '-' + x.endTime : ''),
+        course: x.course || x.title, room: x.room || '', teacher: x.teacher || '',
+      })) };
+    }
+    case 'add_class': {
+      const rec = await addDoc('schedule', {
+        title: args.title, course: args.course || '', dayOfWeek: parseInt(args.dayOfWeek, 10),
+        startTime: args.startTime, endTime: args.endTime || '', room: args.room || '', teacher: args.teacher || '',
+        color: '', enabled: true, createdAt: nowIso(),
+      });
+      await ensureClassReminders();
+      return { ok: true, class: rec };
+    }
+    case 'add_test': {
+      const rec = await addDoc('deadlines', {
+        title: args.title, dueAt: args.dueAt, category: 'class_test',
+        notes: (args.course ? args.course + ' · ' : '') + (args.notes || ''),
+        critical: false, status: 'pending', createdAt: nowIso(),
+      });
+      await ensureDeadlineReminders();
+      return { ok: true, test: rec };
+    }
+    case 'get_classroom_status': {
+      const { getStatus } = require('./classroom');
+      return await getStatus();
+    }
     default:
       return { error: 'unknown tool ' + name };
   }
@@ -282,9 +348,20 @@ async function buildSystemPrompt() {
   const deadlines = await listDocs('deadlines');
   const milestones = await listDocs('milestones');
   const tasks = await listDocs('tasks');
+  const schedule = await listDocs('schedule');
 
   const today = new Date();
   const activePhase = PHASES.find((p) => p.status === 'active');
+  const todayDow = dhakaParts(Date.now()).dow;
+  const todayClasses = schedule
+    .filter((e) => e.enabled !== false && e.dayOfWeek === todayDow)
+    .sort((a, b) => (a.startTime || '').localeCompare(b.startTime || ''))
+    .map((e) => '  - ' + e.title + ' ' + e.startTime + (e.endTime ? '-' + e.endTime : '') + (e.room ? ' (Rm ' + e.room + ')' : '') + (e.teacher ? ' · ' + e.teacher : ''));
+  const upcomingTests = deadlines
+    .filter((d) => (d.category === 'class_test' || d.category === 'classroom') && d.dueAt && daysUntil(d.dueAt) >= 0 && daysUntil(d.dueAt) <= 30)
+    .sort((a, b) => a.dueAt.localeCompare(b.dueAt))
+    .slice(0, 8)
+    .map((d) => '  - ' + d.title + ' (' + humanDate(d.dueAt) + ', ' + inDays(d.dueAt) + ')');
   const upcoming = deadlines
     .filter((d) => d.dueAt && daysUntil(d.dueAt) >= 0 && daysUntil(d.dueAt) <= 120)
     .sort((a, b) => a.dueAt.localeCompare(b.dueAt))
@@ -327,6 +404,12 @@ async function buildSystemPrompt() {
   lines.push('');
   lines.push('Open tasks:');
   lines.push(openTasks.length ? openTasks.join('\n') : '  (none)');
+  lines.push('');
+  lines.push('=== TODAY\'S CLASSES (' + DAY_SHORT[todayDow] + ') ===');
+  lines.push(todayClasses.length ? todayClasses.join('\n') : '  (no classes today)');
+  lines.push('');
+  lines.push('Upcoming class tests / classroom deadlines (next 30 days):');
+  lines.push(upcomingTests.length ? upcomingTests.join('\n') : '  (none)');
   lines.push('');
   lines.push('=== SELF-LEARNING MEMORY (facts learned about Sadnan) ===');
   lines.push(learnedFacts.length ? learnedFacts.join('\n') : '  (none yet)');

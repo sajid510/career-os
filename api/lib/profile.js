@@ -2,6 +2,7 @@ const PROFILE = {
   name: 'Sadnan Jonayet Sajid',
   headline: 'Robotics & Embedded AI Researcher | ROS2 | SLAM | Sensor Fusion | Autonomous Navigation',
   email: 'sadnansajid355@gmail.com',
+  academicEmail: '23208149@uap-bd.edu',
   phone: '+880 1604-816949',
   location: 'Dhaka, Bangladesh',
   github: 'sajid510',

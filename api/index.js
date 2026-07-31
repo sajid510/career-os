@@ -4,13 +4,15 @@ const path = require('path');
 const fs = require('fs');
 const {
   db, admin, nowIso, makeId, getDoc, setDoc, addDoc, listDocs, deleteDoc,
-  daysUntil, inDays, humanDate, toLocalDateStr, addDaysLocal, localNow,
+  daysUntil, inDays, humanDate, toLocalDateStr, addDaysLocal, localNow, dhakaParts, DAY_SHORT,
 } = require('./lib/util');
 const { getSettings, saveSettings, getHubToken, setHubToken } = require('./lib/config');
 const { PROFILE } = require('./lib/profile');
 const { DEADLINES, PHASES, MILESTONES, TASKS, GOALS } = require('./lib/seed');
 const { callGemini, buildSystemPrompt, executeTool, TOOL_DEFS, textFrom } = require('./lib/gemini');
 const { syncAll, syncCareerIo, syncTeamDashboard, ingestConnectorData } = require('./lib/connectors');
+const { ensureClassReminders, ensureDeadlineReminders } = require('./lib/reminders');
+const { buildAuthUrl, syncClassroom, getStatus: getClassroomStatus, HUB_BASE, CALLBACK_PATH } = require('./lib/classroom');
 
 const app = express();
 app.use(cors({ origin: true }));
@@ -325,6 +327,12 @@ app.get('/api/overview', requireAuth, async (req, res) => {
     const systems = await listDocs('systems');
     const learning = await getDoc('learning/stats');
     const profile = await getDoc('profile/main');
+    const schedule = await listDocs('schedule');
+    const todayDow = dhakaParts(Date.now()).dow;
+    const todayClasses = schedule
+      .filter((e) => e.enabled !== false && e.dayOfWeek === todayDow)
+      .sort((a, b) => (a.startTime || '').localeCompare(b.startTime || ''))
+      .map((e) => ({ title: e.title, course: e.course || '', startTime: e.startTime, endTime: e.endTime || '', room: e.room || '', teacher: e.teacher || '' }));
 
     const openTasks = tasks.filter((t) => t.status !== 'done');
     const dueToday = openTasks.filter((t) => t.dueAt && toLocalDateStr(t.dueAt) === toLocalDateStr(today.toISOString()));
@@ -346,6 +354,7 @@ app.get('/api/overview', requireAuth, async (req, res) => {
         unreadNotifications: unread,
       },
       dueTodayTasks: dueToday.map((t) => ({ id: t.id, title: t.title, category: t.category, priority: t.priority })),
+      todayClasses: todayClasses,
       nextDeadlines: nextDeadlines.map((d) => ({ id: d.id, title: d.title, human: inDays(d.dueAt), date: humanDate(d.dueAt), critical: !!d.critical, category: d.category })),
       notifications: recentNotifications.map((n) => ({ id: n.id, title: n.title, body: n.body, type: n.type, read: n.read, createdAt: n.createdAt })),
       systems: systems.map((s) => ({ key: s.id, name: s.name, status: s.status, summary: s.summary || '', lastSync: s.lastSync })),
@@ -420,7 +429,8 @@ app.get('/api/deadlines', requireAuth, async (req, res) => {
 });
 app.post('/api/deadlines', requireAuth, async (req, res) => {
   const rec = await addDoc('deadlines', { title: req.body.title, dueAt: req.body.dueAt, category: req.body.category || 'scholarship', notes: req.body.notes || '', critical: !!req.body.critical, status: 'pending', createdAt: nowIso() });
-  res.json({ ok: true, deadline: rec });
+  const reminders = await ensureDeadlineReminders();
+  res.json({ ok: true, deadline: rec, reminder24hCreated: reminders.created });
 });
 app.delete('/api/deadlines/:id', requireAuth, async (req, res) => {
   await deleteDoc('deadlines/' + req.params.id);
@@ -507,6 +517,49 @@ app.delete('/api/reminders/:id', requireAuth, async (req, res) => {
   res.json({ ok: true });
 });
 
+// ---- weekly class schedule (routine) ----
+app.get('/api/schedule', requireAuth, async (req, res) => {
+  const items = await listDocs('schedule');
+  items.sort((a, b) => (a.dayOfWeek - b.dayOfWeek) || (a.startTime || '').localeCompare(b.startTime || ''));
+  res.json({ ok: true, schedule: items.map((x) => ({
+    id: x.id, title: x.title, course: x.course || '', dayOfWeek: x.dayOfWeek,
+    startTime: x.startTime, endTime: x.endTime || '', room: x.room || '', teacher: x.teacher || '',
+    color: x.color || '', enabled: x.enabled !== false,
+  })) });
+});
+app.post('/api/schedule', requireAuth, async (req, res) => {
+  const b = req.body || {};
+  const dayOfWeek = parseInt(b.dayOfWeek, 10);
+  if (isNaN(dayOfWeek) || dayOfWeek < 0 || dayOfWeek > 6) return res.status(400).json({ ok: false, error: 'dayOfWeek must be 0-6 (0=Sunday)' });
+  if (!b.title) return res.status(400).json({ ok: false, error: 'title required' });
+  if (!b.startTime) return res.status(400).json({ ok: false, error: 'startTime required (HH:MM)' });
+  const rec = await addDoc('schedule', {
+    title: b.title, course: b.course || '', dayOfWeek, startTime: b.startTime, endTime: b.endTime || '',
+    room: b.room || '', teacher: b.teacher || '', color: b.color || '', enabled: b.enabled === undefined ? true : !!b.enabled, createdAt: nowIso(),
+  });
+  const reminders = await ensureClassReminders();
+  res.json({ ok: true, schedule: rec, remindersCreated: reminders.created });
+});
+app.patch('/api/schedule/:id', requireAuth, async (req, res) => {
+  const doc = await getDoc('schedule/' + req.params.id);
+  if (!doc) return res.status(404).json({ ok: false, error: 'not found' });
+  const patch = {};
+  ['title', 'course', 'startTime', 'endTime', 'room', 'teacher', 'color'].forEach((k) => { if (req.body[k] !== undefined) patch[k] = req.body[k]; });
+  if (req.body.dayOfWeek !== undefined) patch.dayOfWeek = parseInt(req.body.dayOfWeek, 10);
+  if (req.body.enabled !== undefined) patch.enabled = !!req.body.enabled;
+  await setDoc('schedule/' + req.params.id, patch);
+  await ensureClassReminders();
+  res.json({ ok: true });
+});
+app.delete('/api/schedule/:id', requireAuth, async (req, res) => {
+  await deleteDoc('schedule/' + req.params.id);
+  const reminders = await listDocs('reminders');
+  for (const r of reminders) {
+    if (r.source === 'schedule' && r.scheduleId === req.params.id) await deleteDoc('reminders/' + r.id);
+  }
+  res.json({ ok: true });
+});
+
 // ---- chat ----
 app.post('/api/chat', requireAuth, async (req, res) => {
   try {
@@ -585,11 +638,12 @@ app.get('/api/settings', requireAuth, async (req, res) => {
       hubName: s.hubName, hubTagline: s.hubTagline, ownerEmail: s.ownerEmail, geminiModel: s.geminiModel,
       careerIoWebhook: s.careerIoWebhook ? 'set' : '', careerIoSpreadsheetUrl: s.careerIoSpreadsheetUrl || '',
       robotDbUrl: s.robotDbUrl, systemsEnabled: s.systemsEnabled || {}, reminderLeadMinutes: s.reminderLeadMinutes,
+      classroomClientIdSet: !!s.classroomClientId, classroomConnected: !!s.classroomRefreshToken,
     },
   });
 });
 app.post('/api/settings', requireAuth, async (req, res) => {
-  const allowed = ['hubName', 'hubTagline', 'ownerEmail', 'geminiModel', 'careerIoWebhook', 'careerIoSecret', 'careerIoSpreadsheetUrl', 'robotDbUrl', 'systemsEnabled', 'reminderLeadMinutes'];
+  const allowed = ['hubName', 'hubTagline', 'ownerEmail', 'geminiModel', 'careerIoWebhook', 'careerIoSecret', 'careerIoSpreadsheetUrl', 'robotDbUrl', 'systemsEnabled', 'reminderLeadMinutes', 'classroomClientId', 'classroomClientSecret'];
   const patch = {};
   allowed.forEach((k) => { if (req.body[k] !== undefined) patch[k] = req.body[k]; });
   if (req.body.geminiKey) patch.geminiKey = req.body.geminiKey;
@@ -597,12 +651,75 @@ app.post('/api/settings', requireAuth, async (req, res) => {
   res.json({ ok: true, geminiKeySet: !!s.geminiKey, hubTokenSet: !!s.hubToken });
 });
 
+// ---- Google Classroom ----
+app.get('/api/classroom/status', requireAuth, async (req, res) => {
+  res.json({ ok: true, classroom: await getClassroomStatus() });
+});
+app.get('/api/classroom/auth', requireAuth, async (req, res) => {
+  const s = await getSettings();
+  if (!s.classroomClientId || !s.classroomClientSecret) {
+    return res.status(400).json({ ok: false, error: 'Set the Google Classroom Client ID and Client secret in Settings first.' });
+  }
+  const state = makeId('clr') + Math.random().toString(36).slice(2, 8);
+  await setDoc('oauth/state', { state, createdAt: nowIso() }, false);
+  res.redirect(buildAuthUrl(s, state));
+});
+app.get('/api/classroom/oauth_callback', async (req, res) => {
+  try {
+    if (req.query.error) return res.redirect('/?classroom=error:' + encodeURIComponent(req.query.error));
+    const st = await getDoc('oauth/state');
+    if (!st || st.state !== req.query.state) return res.redirect('/?classroom=error:state_mismatch');
+    await deleteDoc('oauth/state');
+    const s = await getSettings();
+    const r = await fetch('https://oauth2.googleapis.com/token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        code: req.query.code,
+        client_id: s.classroomClientId,
+        client_secret: s.classroomClientSecret,
+        redirect_uri: HUB_BASE + CALLBACK_PATH,
+        grant_type: 'authorization_code',
+      }),
+    });
+    const j = await r.json();
+    if (!r.ok || !j.refresh_token) {
+      return res.redirect('/?classroom=error:' + encodeURIComponent(j.error_description || j.error || 'no refresh token'));
+    }
+    await saveSettings({
+      classroomRefreshToken: j.refresh_token,
+      classroomAccessToken: j.access_token,
+      classroomTokenExpiry: Date.now() + (j.expires_in - 60) * 1000,
+      classroomEmail: j.email || '',
+    });
+    await syncClassroom().catch(() => {});
+    res.redirect('/?classroom=connected');
+  } catch (e) {
+    res.redirect('/?classroom=error:' + encodeURIComponent(e.message));
+  }
+});
+app.post('/api/classroom/sync', requireAuth, async (req, res) => {
+  try {
+    const r = await syncClassroom();
+    if (!r.ok) return res.status(400).json({ ok: false, error: r.error });
+    const reminders = await ensureDeadlineReminders();
+    res.json({ ok: true, courses: r.courses, workTotal: r.workTotal, newDeadlines: r.newDeadlines, newAnnouncements: r.newAnnouncements, summary: r.summary, reminder24hCreated: reminders.created });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+app.post('/api/classroom/disconnect', requireAuth, async (req, res) => {
+  await saveSettings({ classroomRefreshToken: '', classroomAccessToken: '', classroomTokenExpiry: 0, classroomEmail: '' });
+  res.json({ ok: true });
+});
+
 // ---- cron endpoints (called by GitHub Actions) ----
 app.post('/api/cron/15min', requireAuth, async (req, res) => {
   try {
     const reminders = await processReminders();
+    const classReminders = await ensureClassReminders();
     const connectors = await syncAll('light');
-    res.json({ ok: true, reminders, connectors });
+    res.json({ ok: true, reminders, classReminders, connectors });
   } catch (e) {
     res.status(500).json({ ok: false, error: e.message });
   }
@@ -610,6 +727,8 @@ app.post('/api/cron/15min', requireAuth, async (req, res) => {
 app.post('/api/cron/daily', requireAuth, async (req, res) => {
   try {
     const reminders = await processReminders();
+    const classReminders = await ensureClassReminders();
+    const dlReminders = await ensureDeadlineReminders();
     const connectors = await syncAll('light');
     const deadlinePings = await deadlineReminders();
     const overview = {
@@ -624,9 +743,13 @@ app.post('/api/cron/daily', requireAuth, async (req, res) => {
     let brief = 'Good morning, Sadnan. ' + todayDate.getDate() + ' ' + monthNames[todayDate.getMonth()] + ' ' + todayDate.getFullYear() + '.';
     if (due.length) brief += ' You have ' + due.length + ' task' + (due.length > 1 ? 's' : '') + ' due today: ' + due.map((t) => t.title).join(', ') + '.';
     else brief += ' No tasks due today - use the time to pull ahead.';
+    const schedule = await listDocs('schedule');
+    const todayDow = dhakaParts(Date.now()).dow;
+    const todayClasses = schedule.filter((e) => e.enabled !== false && e.dayOfWeek === todayDow).sort((a, b) => (a.startTime || '').localeCompare(b.startTime || ''));
+    if (todayClasses.length) brief += ' Classes today (' + DAY_SHORT[todayDow] + '): ' + todayClasses.map((c) => c.title + ' at ' + c.startTime + (c.room ? ' (Rm ' + c.room + ')' : '')).join('; ') + '.';
     if (countdowns.length) brief += ' Deadlines ahead: ' + countdowns.map((d) => d.title + ' (' + inDays(d.dueAt) + ')').join('; ') + '.';
     await notify('Morning brief', brief, 'agent', 'info', { source: 'daily' });
-    res.json({ ok: true, brief, reminders, deadlinePings, connectors });
+    res.json({ ok: true, brief, reminders, classReminders, dlReminders, deadlinePings, connectors });
   } catch (e) {
     res.status(500).json({ ok: false, error: e.message });
   }

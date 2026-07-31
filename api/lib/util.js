@@ -69,6 +69,38 @@ function humanDate(iso) {
   return d.getDate() + ' ' + months[d.getMonth()] + ' ' + d.getFullYear();
 }
 
+const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+const DAY_SHORT = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+// Asia/Dhaka (UTC+6) wall-clock components of a timestamp (tz-independent).
+function dhakaParts(dateMs) {
+  const t = (dateMs == null ? Date.now() : dateMs) + 6 * 60 * 60 * 1000;
+  const d = new Date(t);
+  return { y: d.getUTCFullYear(), m: d.getUTCMonth() + 1, day: d.getUTCDate(), dow: d.getUTCDay(), h: d.getUTCHours(), min: d.getUTCMinutes() };
+}
+
+// Build an ISO UTC string from Dhaka local wall-clock components.
+function dhakaIso(y, m, day, h, min) {
+  return new Date(Date.UTC(y, m - 1, day, h - 6, min || 0, 0, 0)).toISOString();
+}
+
+// Next ISO occurrences of a weekly class (dayOfWeek 0=Sunday) starting at HH:MM
+// within the next `horizonDays` days (inclusive of today), Dhaka local time.
+function nextClassOccurrences(dayOfWeek, startTime, horizonDays) {
+  const now = Date.now();
+  const [h, min] = String(startTime || '00:00').split(':').map(Number);
+  const parts = dhakaParts(now);
+  const baseUtc = Date.UTC(parts.y, parts.m - 1, parts.day);
+  const out = [];
+  for (let i = 0; i <= horizonDays; i++) {
+    const occMs = baseUtc + i * 86400000 + (h - 6) * 3600000 + (min || 0) * 60000;
+    if (occMs < now) continue;
+    const dow = new Date(occMs + 6 * 3600000).getUTCDay();
+    if (dow === dayOfWeek) out.push(new Date(occMs).toISOString());
+  }
+  return out;
+}
+
 async function getDoc(path) {
   const snap = await db.doc(path).get();
   return snap.exists ? snap.data() : null;
@@ -117,6 +149,11 @@ module.exports = {
   daysUntil,
   inDays,
   humanDate,
+  DAY_NAMES,
+  DAY_SHORT,
+  dhakaParts,
+  dhakaIso,
+  nextClassOccurrences,
   getDoc,
   setDoc,
   addDoc,

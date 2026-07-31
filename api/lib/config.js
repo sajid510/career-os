@@ -17,6 +17,12 @@ const DEFAULTS = {
   timezone: 'Asia/Dhaka',
   reminderLeadMinutes: 60,
   dailyBriefTime: '07:00',
+  classroomClientId: '',
+  classroomClientSecret: '',
+  classroomRefreshToken: '',
+  classroomAccessToken: '',
+  classroomTokenExpiry: 0,
+  classroomEmail: '',
   systemsEnabled: {
     careerIo: true,
     teamDashboard: true,

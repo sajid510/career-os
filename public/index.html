@@ -116,6 +116,18 @@ section{animation:fade .2s ease}
 .upload{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
 .upload input[type=file]{flex:1;min-width:200px}
 #ingestStatus{margin-top:10px;font-size:13px}
+.week{display:grid;grid-template-columns:repeat(7,1fr);gap:8px;overflow-x:auto}
+@media(max-width:1000px){.week{grid-template-columns:repeat(2,1fr)}}
+@media(max-width:560px){.week{grid-template-columns:1fr}}
+.daycol{background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:10px;min-width:120px}
+.daycol.today{border-color:var(--acc)}
+.dayname{font-size:12px;font-weight:700;color:var(--mut);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px}
+.dayname.today{color:var(--acc)}
+.slot{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:8px;margin-bottom:6px;position:relative}
+.slot .stime{font-size:11px;color:var(--acc);font-weight:600}
+.slot .scourse{font-size:12.5px;font-weight:600;margin:2px 0}
+.slot .sroom{font-size:11px;color:var(--mut)}
+.slot button{position:absolute;top:4px;right:4px;background:none;border:none;color:var(--mut);font-size:12px;cursor:pointer}
 .oktxt{color:var(--ok)}.errtxt{color:var(--err)}
 
 .settings-row{display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--line);gap:10px}
@@ -148,6 +160,7 @@ footer{color:var(--mut);font-size:11.5px;text-align:center;padding:26px 0 14px}
       <button data-tab="tasks">Tasks</button>
       <button data-tab="plan">Plan</button>
       <button data-tab="schedule">Schedule</button>
+      <button data-tab="classes">Classes</button>
       <button data-tab="ai">AI Assistant</button>
       <button data-tab="learning">Learning</button>
       <button data-tab="settings">Settings</button>
@@ -245,6 +258,45 @@ footer{color:var(--mut);font-size:11.5px;text-align:center;padding:26px 0 14px}
     </div>
   </section>
 
+  <!-- CLASSES -->
+  <section id="tab-classes" class="hidden">
+    <div class="card" style="margin-bottom:12px">
+      <h3>➕ Add class</h3>
+      <div class="row">
+        <input class="grow" id="cTitle" placeholder="Course title (e.g. Signals &amp; Systems)">
+        <input id="cCourse" placeholder="Code (e.g. EEE 310)" style="max-width:120px">
+        <select id="cDay" style="max-width:130px">
+          <option value="0">Sunday</option><option value="1">Monday</option><option value="2">Tuesday</option>
+          <option value="3">Wednesday</option><option value="4">Thursday</option><option value="5">Friday</option><option value="6">Saturday</option>
+        </select>
+        <input id="cStart" type="time" value="08:00" style="max-width:110px">
+        <input id="cEnd" type="time" value="09:30" style="max-width:110px">
+        <input id="cRoom" placeholder="Room" style="max-width:100px">
+        <input id="cTeacher" placeholder="Instructor" style="max-width:120px">
+        <button class="btn" onclick="addClass()">Add</button>
+      </div>
+      <small>Each class gets an offline reminder 15 minutes before it starts.</small>
+    </div>
+    <div class="card" style="margin-bottom:12px">
+      <h3>🗓️ Weekly routine</h3>
+      <div class="week" id="scheduleGrid"></div>
+    </div>
+    <div class="card" style="margin-bottom:12px">
+      <h3>📝 Add class test (reminds 24h before)</h3>
+      <div class="row">
+        <input class="grow" id="tTestTitle" placeholder="Test title (e.g. EEE 310 Midterm)">
+        <input id="tTestCourse" placeholder="Course" style="max-width:120px">
+        <input id="tTestDue" type="datetime-local">
+        <input id="tTestNotes" placeholder="Notes / marks" style="max-width:180px">
+        <button class="btn" onclick="addTest()">Add</button>
+      </div>
+    </div>
+    <div class="card">
+      <h3>🧪 Upcoming tests &amp; classroom deadlines</h3>
+      <div id="testsList"></div>
+    </div>
+  </section>
+
   <!-- AI -->
   <section id="tab-ai" class="hidden">
     <div class="card">
@@ -286,6 +338,19 @@ footer{color:var(--mut);font-size:11.5px;text-align:center;padding:26px 0 14px}
       <div class="settings-row"><div class="l">career-intelligence-agent-os</div><div class="v"><button class="btn ghost" onclick="api('/api/systems/sync','POST',{scope:'light'}).then(()=>toast('Synced'))">Sync</button></div></div>
       <div class="settings-row"><div class="l">robot-oda-dashboard</div><div class="v"><button class="btn ghost" onclick="api('/api/systems/sync','POST',{scope:'light'}).then(()=>toast('Synced'))">Sync</button></div></div>
       <div class="settings-row"><div class="l">robowatch / EEE / news-pulse</div><div class="v"><small>Auto-synced by GitHub Actions</small></div></div>
+    </div>
+    <div class="card">
+      <h3>📚 Google Classroom</h3>
+      <div class="settings-row"><div class="l">Status</div><div class="v" id="sClassroom">—</div></div>
+      <div class="settings-row"><div class="l">OAuth Client ID</div><div class="v"><input id="sClassroomId" placeholder="Google OAuth client ID" style="min-width:280px"></div></div>
+      <div class="settings-row"><div class="l">OAuth Client secret</div><div class="v"><input id="sClassroomSecret" type="password" placeholder="Google OAuth client secret" style="min-width:280px"></div></div>
+      <div class="settings-row"><div class="l">Last sync</div><div class="v" id="sClassroomSync" style="font-size:12px"></div></div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px">
+        <button class="btn ghost" onclick="classroomConnect()">Connect Classroom</button>
+        <button class="btn ghost" onclick="classroomSync()">Sync now</button>
+        <button class="btn warn" onclick="classroomDisconnect()">Disconnect</button>
+      </div>
+      <small style="display:block;margin-top:10px">Courses, assignments &amp; announcements sync into deadlines + 24h reminders. Set the Client ID/Secret, then press <b>Connect Classroom</b> to authorize your Google account.</small>
     </div>
   </section>
 
@@ -340,6 +405,7 @@ document.querySelectorAll('nav button').forEach((b) => b.addEventListener('click
   if (tab === 'tasks') loadTasks();
   if (tab === 'plan') loadPlan();
   if (tab === 'schedule') loadSchedule();
+  if (tab === 'classes') loadClasses();
   if (tab === 'learning') loadLearning();
   if (tab === 'settings') loadSettings();
   if (tab === 'ai') document.getElementById('chatInput').focus();
@@ -351,6 +417,9 @@ function init() {
   document.getElementById('app').classList.remove('hidden');
   const d = new Date();
   document.getElementById('todayLabel').textContent = d.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' });
+  const q = new URLSearchParams(location.search);
+  if (q.get('classroom') === 'connected') { toast('Google Classroom connected ✅'); history.replaceState({}, '', location.pathname); }
+  else if (q.get('classroom') && q.get('classroom').startsWith('error')) { toast('Classroom error: ' + q.get('classroom').slice(6)); history.replaceState({}, '', location.pathname); }
   loadOverview();
 }
 init();
@@ -453,6 +522,89 @@ function addReminder() {
   api('/api/reminders', 'POST', { title: document.getElementById('rTitle').value.trim(), body: document.getElementById('rBody').value, dueAt: new Date(due).toISOString(), leadMinutes: parseInt(document.getElementById('rLead').value, 10) }).then(() => { loadSchedule(); toast('Reminder scheduled (works offline)'); }).catch((e) => toast(e.message));
 }
 
+// ----- CLASSES -----
+function loadClasses() {
+  Promise.all([api('/api/schedule'), api('/api/deadlines')]).then(([s, d]) => {
+    const items = s.schedule || [];
+    const tests = (d.deadlines || []).filter((x) => x.category === 'class_test' || x.category === 'classroom').sort((a, b) => (a.dueAt || '').localeCompare(b.dueAt || ''));
+    const todayDow = new Date().getDay();
+    const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+    const grid = document.getElementById('scheduleGrid');
+    grid.innerHTML = days.map((name, idx) => {
+      const list = items.filter((x) => x.dayOfWeek === idx).sort((a, b) => a.startTime.localeCompare(b.startTime));
+      const isToday = idx === todayDow;
+      return '<div class="daycol' + (isToday ? ' today' : '') + '">' +
+        '<div class="dayname' + (isToday ? ' today' : '') + '">' + name.slice(0, 3) + (isToday ? ' · today' : '') + '</div>' +
+        (list.length ? list.map((x) => '<div class="slot"><div class="stime">' + esc(x.startTime) + (x.endTime ? '-' + esc(x.endTime) : '') + '</div><div class="scourse">' + esc(x.course || x.title) + '</div><div class="sroom">' + esc(x.room ? 'Rm ' + x.room : '') + (x.teacher ? ' · ' + esc(x.teacher) : '') + '</div><button title="Delete" onclick="delClass(\'' + x.id + '\')">🗑️</button></div>').join('') : '<div class="empty">—</div>') +
+        '</div>';
+    }).join('');
+    document.getElementById('testsList').innerHTML = tests.length
+      ? tests.map((x) => '<div class="item"><div class="dot ' + (x.critical ? 'crit' : 'med') + '"></div><div class="txt"><div class="t">' + esc(x.title) + '</div><div class="d">' + esc(x.date) + ' · ' + esc(x.category.replace('_', ' ')) + (x.notes ? ' · ' + esc(x.notes) : '') + '</div></div><span class="tag ' + (x.human.startsWith('TODAY') || x.human.startsWith('tomorrow') || x.human.startsWith('in 0') || x.human.startsWith('in 1') ? 'soon' : '') + '">' + esc(x.human) + '</span></div>').join('')
+      : '<div class="empty">No tests or classroom deadlines yet</div>';
+  }).catch((e) => toast(e.message));
+}
+function addClass() {
+  const body = {
+    title: document.getElementById('cTitle').value.trim(),
+    course: document.getElementById('cCourse').value.trim(),
+    dayOfWeek: parseInt(document.getElementById('cDay').value, 10),
+    startTime: document.getElementById('cStart').value,
+    endTime: document.getElementById('cEnd').value,
+    room: document.getElementById('cRoom').value.trim(),
+    teacher: document.getElementById('cTeacher').value.trim(),
+  };
+  if (!body.title || !body.startTime) return toast('Title + start time required');
+  api('/api/schedule', 'POST', body).then((r) => {
+    ['cTitle', 'cCourse', 'cRoom', 'cTeacher'].forEach((id) => { document.getElementById(id).value = ''; });
+    loadClasses();
+    toast('Class added — ' + (r.remindersCreated || 0) + ' offline reminders scheduled');
+  }).catch((e) => toast(e.message));
+}
+function delClass(id) { api('/api/schedule/' + id, 'DELETE').then(() => { loadClasses(); toast('Class removed'); }).catch((e) => toast(e.message)); }
+function addTest() {
+  const due = document.getElementById('tTestDue').value;
+  if (!document.getElementById('tTestTitle').value.trim() || !due) return toast('Title + date/time required');
+  api('/api/deadlines', 'POST', {
+    title: document.getElementById('tTestTitle').value.trim(),
+    dueAt: new Date(due).toISOString(),
+    category: 'class_test',
+    notes: (document.getElementById('tTestCourse').value.trim() ? document.getElementById('tTestCourse').value.trim() + ' · ' : '') + document.getElementById('tTestNotes').value.trim(),
+  }).then(() => { ['tTestTitle', 'tTestCourse', 'tTestNotes'].forEach((id) => { document.getElementById(id).value = ''; }); loadClasses(); toast('Test added — 24h reminder set'); }).catch((e) => toast(e.message));
+}
+
+// ----- GOOGLE CLASSROOM -----
+function loadClassroom() {
+  api('/api/classroom/status').then((o) => {
+    const c = o.classroom || {};
+    document.getElementById('sClassroom').textContent = c.connected ? ('✅ Connected' + (c.email ? ' · ' + c.email : '')) : 'Not connected';
+    document.getElementById('sClassroomSync').textContent = c.summary ? (c.summary + (c.lastSync ? ' · last ' + new Date(c.lastSync).toLocaleString() : '')) : 'No sync yet';
+  }).catch(() => {});
+}
+function classroomConnect() {
+  const id = document.getElementById('sClassroomId').value.trim();
+  const sec = document.getElementById('sClassroomSecret').value.trim();
+  const doConnect = () => { window.location.href = '/api/classroom/auth'; };
+  if (id || sec) {
+    const p = {};
+    if (id) p.classroomClientId = id;
+    if (sec) p.classroomClientSecret = sec;
+    api('/api/settings', 'POST', p).then(doConnect).catch((e) => toast(e.message));
+  } else {
+    doConnect();
+  }
+}
+function classroomSync() {
+  toast('Syncing Google Classroom...');
+  api('/api/classroom/sync', 'POST').then((r) => {
+    toast(r.summary || 'Synced');
+    loadClassroom();
+    loadClasses();
+  }).catch((e) => toast(e.message));
+}
+function classroomDisconnect() {
+  api('/api/classroom/disconnect', 'POST').then(() => { loadClassroom(); toast('Disconnected'); }).catch((e) => toast(e.message));
+}
+
 // ----- AI -----
 let chatBusy = false;
 function pushMsg(role, text) {
@@ -515,6 +667,7 @@ function loadSettings() {
     document.getElementById('sCareer').textContent = s.careerIoWebhook ? 'configured' : 'not configured';
     document.getElementById('sToken').textContent = localStorage.getItem('hubToken');
     document.getElementById('sModel').value = s.geminiModel || 'gemini-flash-latest';
+    loadClassroom();
   }).catch((e) => toast(e.message));
 }
 function saveSettings() {

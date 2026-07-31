@@ -1,5 +1,6 @@
 const { nowIso, setDoc, getDoc, addDoc, listDocs } = require('./util');
 const { getSettings } = require('./config');
+const { syncClassroom } = require('./classroom');
 
 function summarizeText(text, max) {
   if (!text) return '';
@@ -132,6 +133,13 @@ async function syncAll(scope) {
   } else {
     if (enabled.careerIo !== false) out.careerIo = await syncCareerIo();
     if (enabled.teamDashboard !== false) out.teamDashboard = await syncTeamDashboard();
+  }
+  if (enabled.classroom !== false) {
+    try {
+      out.classroom = await syncClassroom();
+    } catch (e) {
+      out.classroom = { ok: false, error: e.message };
+    }
   }
   return out;
 }
