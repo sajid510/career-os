@@ -12,6 +12,7 @@ const { DEADLINES, PHASES, MILESTONES, TASKS, GOALS } = require('./lib/seed');
 const { callGemini, buildSystemPrompt, executeTool, TOOL_DEFS, textFrom } = require('./lib/gemini');
 const { syncAll, syncCareerIo, syncTeamDashboard, ingestConnectorData } = require('./lib/connectors');
 const { ensureClassReminders, ensureDeadlineReminders } = require('./lib/reminders');
+const { ensureDailyRoutine } = require('./lib/routine');
 const { buildAuthUrl, syncClassroom, getStatus: getClassroomStatus, HUB_BASE, CALLBACK_PATH } = require('./lib/classroom');
 const {
   logTaskOutcome,
@@ -465,6 +466,12 @@ app.post('/api/tasks/:id/complete', requireAuth, async (req, res) => {
 app.delete('/api/tasks/:id', requireAuth, async (req, res) => {
   await deleteDoc('tasks/' + req.params.id);
   res.json({ ok: true });
+});
+
+// ---- daily routine (2h study + 1h project, generated each morning by cron) ----
+app.post('/api/routine/today', requireAuth, async (req, res) => {
+  const result = await ensureDailyRoutine();
+  res.json({ ok: true, routine: result });
 });
 
 // ---- deadlines ----
@@ -958,6 +965,7 @@ app.post('/api/cron/15min', requireAuth, async (req, res) => {
 });
 app.post('/api/cron/daily', requireAuth, async (req, res) => {
   try {
+    const routine = await ensureDailyRoutine();
     const reminders = await processReminders();
     const classReminders = await ensureClassReminders();
     const dlReminders = await ensureDeadlineReminders();
@@ -981,7 +989,7 @@ app.post('/api/cron/daily', requireAuth, async (req, res) => {
     if (todayClasses.length) brief += ' Classes today (' + DAY_SHORT[todayDow] + '): ' + todayClasses.map((c) => c.title + ' at ' + c.startTime + (c.room ? ' (Rm ' + c.room + ')' : '')).join('; ') + '.';
     if (countdowns.length) brief += ' Deadlines ahead: ' + countdowns.map((d) => d.title + ' (' + inDays(d.dueAt) + ')').join('; ') + '.';
     await notify('Morning brief', brief, 'agent', 'info', { source: 'daily' });
-    res.json({ ok: true, brief, reminders, classReminders, dlReminders, deadlinePings, connectors });
+    res.json({ ok: true, brief, routine, reminders, classReminders, dlReminders, deadlinePings, connectors });
   } catch (e) {
     res.status(500).json({ ok: false, error: e.message });
   }
