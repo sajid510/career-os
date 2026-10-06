@@ -67,14 +67,14 @@ test('recordFact dedupes by reinforcing instead of duplicating', async () => {
 
 test('reinforce + forget lifecycle keeps history (soft-delete)', async () => {
   db._reset();
-  const rec = await recordFact({ fact: 'Prefers IELTS morning practice', strength: 3, source: 'manual' });
+  const rec = await recordFact({ fact: 'Prefers morning deep-work practice', strength: 3, source: 'manual' });
   const r = await reinforceFact(rec.id);
   assert.strictEqual(r.confirmCount, 2);
   assert.strictEqual(r.strength, 4);
   await forgetFact(rec.id);
   const doc = await getDoc('learning_facts/' + rec.id);
   assert.strictEqual(doc.status, 'forgotten');
-  assert.strictEqual(doc.fact, 'Prefers IELTS morning practice');
+  assert.strictEqual(doc.fact, 'Prefers morning deep-work practice');
   const relevant = await getRelevantFacts({ limit: 10 });
   assert.ok(!relevant.find((f) => f.id === rec.id));
 });
@@ -91,20 +91,20 @@ test('upsertRefinedFacts merges instead of wiping', async () => {
 
 test('getRelevantFacts ranks tag overlap above strength', async () => {
   db._reset();
-  await recordFact({ fact: 'IELTS reading strategy', strength: 3, source: 'manual' });
+  await recordFact({ fact: 'Technical reading strategy', strength: 3, source: 'manual' });
   await recordFact({ fact: 'ROS2 navigation tuning', strength: 5, source: 'manual' });
-  const res = await getRelevantFacts({ query: 'IELTS reading', limit: 5 });
+  const res = await getRelevantFacts({ query: 'technical reading', limit: 5 });
   assert.ok(res.length >= 2);
-  assert.ok(res[0].fact.toLowerCase().includes('ielts'));
+  assert.ok(res[0].fact.toLowerCase().includes('technical'));
 });
 
 test('scoreFacts is pure and sorts by score desc', () => {
   const out = scoreFacts(
     [
       { id: 'a', fact: 'x', strength: 5, confirmCount: 1, tags: [], status: 'active', lastUsed: new Date().toISOString() },
-      { id: 'b', fact: 'IELTS morning', strength: 3, confirmCount: 1, tags: ['ielts'], status: 'active', lastUsed: new Date().toISOString() },
+      { id: 'b', fact: 'Morning routine', strength: 3, confirmCount: 1, tags: ['morning'], status: 'active', lastUsed: new Date().toISOString() },
     ],
-    { query: 'IELTS' }
+    { query: 'morning' }
   );
   assert.strictEqual(out[0].id, 'b');
 });

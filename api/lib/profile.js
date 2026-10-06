@@ -74,7 +74,7 @@ const PROFILE = {
     'Chevening UK October 2026 (one long-shot application)',
   ],
   criticalPath: [
-    'IELTS Academic 7.0+ by June 2026',
+    'IELTS Academic 7.0+ after BSc (post-Dec 2027)',
     'Paper #1 submitted by September 2026 (hard deadline)',
     'GRE Aug/Sep 2026 if pursuing USA',
     'SOP full draft by October 2026',

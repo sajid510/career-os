@@ -7,7 +7,6 @@ function dateISO(y, m, d) {
 
 // Key scholarship / application deadlines
 const DEADLINES = [
-  { title: 'IELTS Academic exam (target 7.0+)', dueAt: dateISO(2026, 6, 30), category: 'language', phase: 'Foundations', notes: 'Register + prepare. If below 6.5, retake in August.', critical: true },
   { title: 'Paper #1 hard deadline - submit to conference (ICCAS/URAI/ROBIO)', dueAt: dateISO(2026, 9, 30), category: 'research', phase: 'Foundations', notes: 'Stop everything else and submit this month. Primary ICCAS July 2026; backups ROBIO/URAI Aug-Sep.', critical: true },
   { title: 'GRE exam (if pursuing USA)', dueAt: dateISO(2026, 9, 15), category: 'standardized', phase: 'Foundations', notes: 'Target Quant 165+, Verbal 155+.', critical: false },
   { title: 'Mitacs Globalink Research Award application', dueAt: dateISO(2026, 10, 1), category: 'opportunity', phase: 'Foundations', notes: '5 Canadian robotics professors; applications open ~Sept.', critical: true },
@@ -31,7 +30,7 @@ const DEADLINES = [
 
 // Plan phases (from the roadmap's monthly plan)
 const PHASES = [
-  { key: 'Foundations', label: 'Foundations (Mar-Sep 2026)', start: dateISO(2026, 3, 1), end: dateISO(2026, 9, 30), status: 'active', focus: ['IELTS', 'Paper #1', 'GRE decision', 'Mitacs Globalink', 'CGPA recovery'] },
+  { key: 'Foundations', label: 'Foundations (Mar-Sep 2026)', start: dateISO(2026, 3, 1), end: dateISO(2026, 9, 30), status: 'active', focus: ['Paper #1', 'GRE decision', 'Mitacs Globalink', 'CGPA recovery'] },
   { key: 'GearUp', label: 'Gear Up (Oct-Dec 2026)', start: dateISO(2026, 10, 1), end: dateISO(2026, 12, 31), status: 'pending', focus: ['Chevening', 'SOP', 'Recommendation letters', 'Academic CV', 'GKS documents', 'Year-end review'] },
   { key: 'Outreach', label: 'Outreach (Jan-Jun 2027)', start: dateISO(2027, 1, 1), end: dateISO(2027, 6, 30), status: 'pending', focus: ['Professor emails JP/DE/CA/US', 'MEXT application + interview', 'GKS application', 'AAS application', 'Paper #2'] },
   { key: 'Peak', label: 'Peak Applications (Jul-Dec 2027)', start: dateISO(2027, 7, 1), end: dateISO(2027, 12, 31), status: 'pending', focus: ['US applications', 'DAAD application', 'Graduation', 'German exam', 'Results & backups'] },
@@ -39,7 +38,6 @@ const PHASES = [
 
 // Milestones (checkpoints to celebrate/track)
 const MILESTONES = [
-  { title: 'IELTS 7.0+ secured', dueAt: dateISO(2026, 7, 15), category: 'language', status: 'pending', phase: 'Foundations' },
   { title: 'Paper #1 submitted to IEEE conference', dueAt: dateISO(2026, 9, 30), category: 'research', status: 'pending', phase: 'Foundations' },
   { title: 'Mitacs Globalink submitted', dueAt: dateISO(2026, 10, 1), category: 'opportunity', status: 'pending', phase: 'Foundations' },
   { title: '25+ professors researched & contact list built', dueAt: dateISO(2026, 12, 31), category: 'outreach', status: 'pending', phase: 'GearUp' },
@@ -61,7 +59,6 @@ const TASKS = [
 const GOALS = [
   { goal: 'Fully funded MSc/RA in Robotics, Autonomous Systems, or Embedded AI', by: '2028 intake', status: 'active' },
   { goal: 'Submit Paper #1 to an IEEE conference', by: 'September 2026', status: 'active' },
-  { goal: 'IELTS 7.0+', by: 'June 2026', status: 'active' },
   { goal: 'CGPA recovery to 3.0+ with strong upward trend', by: 'December 2027', status: 'active' },
   { goal: 'Build 25+ professor/research contacts', by: 'December 2026', status: 'active' },
 ];
