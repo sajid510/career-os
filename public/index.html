@@ -135,6 +135,17 @@ section{animation:fade .2s ease}
 .settings-row .v{font-size:13.5px;word-break:break-all}
 small{color:var(--mut)}
 .empty{color:var(--mut);font-size:13px;padding:14px 0;text-align:center}
+.tcard{background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:14px}
+.tcard.running{border-color:var(--ok)}
+.tcard.done{border-color:var(--acc)}
+.ttitle{font-size:13.5px;font-weight:700;margin-bottom:2px}
+.tsub{font-size:11.5px;color:var(--mut);margin-bottom:8px}
+.ttime{font-size:34px;font-weight:700;font-variant-numeric:tabular-nums;letter-spacing:1px;margin:4px 0}
+.pbar{height:8px;background:var(--panel);border:1px solid var(--line);border-radius:6px;overflow:hidden;margin:8px 0}
+.pfill{height:100%;background:var(--acc);width:0%}
+.tcard.running .pfill{background:var(--ok)}
+.trow{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:8px}
+.tlink{font-size:11.5px;color:var(--mut);margin-top:8px}
 footer{color:var(--mut);font-size:11.5px;text-align:center;padding:26px 0 14px}
 </style>
 </head>
@@ -197,6 +208,34 @@ footer{color:var(--mut);font-size:11.5px;text-align:center;padding:26px 0 14px}
 
   <!-- TASKS -->
   <section id="tab-tasks" class="hidden">
+    <div class="card" style="margin-bottom:12px">
+      <h3>⏱️ Focus timers</h3>
+      <p style="font-size:12.5px;color:var(--mut);margin-bottom:10px">Start a timer when you begin. Reaching the target auto-completes today's routine task. Timers survive reloads; only one runs at a time.</p>
+      <div class="grid two">
+        <div class="tcard" id="tm-study">
+          <div class="ttitle">📚 Academic study</div>
+          <div class="tsub">Target 2h 00m / day</div>
+          <div class="ttime" id="tm-study-time">2:00:00</div>
+          <div class="pbar"><div class="pfill" id="tm-study-fill"></div></div>
+          <div class="trow">
+            <button class="btn" id="tm-study-btn" onclick="toggleTimer('study')">▶ Start</button>
+            <button class="btn" onclick="resetTimer('study')">↺ Reset</button>
+          </div>
+          <div class="tlink" id="tm-study-link">Linking today's task…</div>
+        </div>
+        <div class="tcard" id="tm-project">
+          <div class="ttitle">🛠️ Project / technical work</div>
+          <div class="tsub">Target 1h 00m / day</div>
+          <div class="ttime" id="tm-project-time">1:00:00</div>
+          <div class="pbar"><div class="pfill" id="tm-project-fill"></div></div>
+          <div class="trow">
+            <button class="btn" id="tm-project-btn" onclick="toggleTimer('project')">▶ Start</button>
+            <button class="btn" onclick="resetTimer('project')">↺ Reset</button>
+          </div>
+          <div class="tlink" id="tm-project-link">Linking today's task…</div>
+        </div>
+      </div>
+    </div>
     <div class="card" style="margin-bottom:12px">
       <h3>➕ New task</h3>
       <div class="row">
@@ -498,6 +537,7 @@ function init() {
   if (q.get('classroom') === 'connected') { toast('Google Classroom connected ✅'); history.replaceState({}, '', location.pathname); }
   else if (q.get('classroom') && q.get('classroom').startsWith('error')) { toast('Classroom error: ' + q.get('classroom').slice(6)); history.replaceState({}, '', location.pathname); }
   loadOverview();
+  setInterval(renderTimers, 1000); renderTimers();
 }
 init();
 
@@ -540,7 +580,8 @@ function loadTasks() {
     document.getElementById('tasksList').innerHTML = o.tasks.length
       ? o.tasks.map((t) => '<div class="tbl-row"><button onclick="setTask(\'' + t.id + '\',\'done\')" title="Complete">✅</button><div class="t" style="' + (t.status === 'done' ? 'text-decoration:line-through;color:var(--mut)' : '') + '">' + esc(t.title) + ' <span class="tag">' + esc(t.category) + '</span>' + (t.dueAt ? ' <span class="tag ' + (t.human === 'TODAY' ? 'today' : t.human.startsWith('in 0') || t.human.startsWith('in 1') ? 'soon' : '') + '">' + esc(t.human) + '</span>' : '') + '</div><select onchange="setTask(\'' + t.id + '\',this.value)"><option value="open" ' + (t.status === 'open' ? 'selected' : '') + '>Open</option><option value="in_progress" ' + (t.status === 'in_progress' ? 'selected' : '') + '>In progress</option><option value="blocked" ' + (t.status === 'blocked' ? 'selected' : '') + '>Blocked</option><option value="done" ' + (t.status === 'done' ? 'selected' : '') + '>Done</option></select><button onclick="del(\'/api/tasks/\'+\'' + t.id + '\', loadTasks)" title="Delete">🗑️</button></div>').join('')
       : '<div class="empty">No tasks yet</div>';
-  }).catch((e) => toast(e.message));
+    linkFocusTimers(o.tasks);
+  }).catch((e) => toast('Tasks: ' + e.message));
 }
 function addTask() {
   const body = { title: document.getElementById('tTitle').value.trim(), dueAt: document.getElementById('tDue').value || '', category: document.getElementById('tCat').value, priority: document.getElementById('tPri').value };
@@ -551,6 +592,78 @@ function setTask(id, status) {
   api('/api/tasks/' + id, 'PATCH', { status }).then(() => loadTasks()).catch((e) => toast(e.message));
 }
 function del(path, after) { api(path, 'DELETE').then(after).catch((e) => toast(e.message)); }
+
+// ----- FOCUS TIMERS (auto-complete today's routine tasks) -----
+const TIMER_DEFS = {
+  study: { target: 7200, match: 'Academic study', targetLabel: '2h 00m' },
+  project: { target: 3600, match: 'Project / technical', targetLabel: '1h 00m' },
+};
+const TIMER_STORE = 'focusTimers.v1';
+function timerToday() { const d = new Date(); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); }
+function freshTimerState() { return { date: timerToday(), study: { elapsed: 0, running: false, since: 0 }, project: { elapsed: 0, running: false, since: 0 } }; }
+let timerState = (() => { try { const s = JSON.parse(localStorage.getItem(TIMER_STORE)); if (s && s.date === timerToday() && s.study && s.project) return s; } catch (e) {} return freshTimerState(); })();
+let linkedTask = { study: null, project: null };
+function saveTimers() { try { localStorage.setItem(TIMER_STORE, JSON.stringify(timerState)); } catch (e) {} }
+function elapsedOf(key) { const s = timerState[key]; let e = s.elapsed || 0; if (s.running && s.since) e += Math.floor((Date.now() - s.since) / 1000); return e; }
+function fmtClock(sec) { sec = Math.max(0, sec); const h = Math.floor(sec / 3600), m = Math.floor((sec % 3600) / 60), s = sec % 60; return h + ':' + String(m).padStart(2, '0') + ':' + String(s).padStart(2, '0'); }
+function fmtDur(sec) { const h = Math.floor(sec / 3600), m = Math.floor((sec % 3600) / 60); return h + 'h ' + String(m).padStart(2, '0') + 'm'; }
+function toggleTimer(key) {
+  if (timerState.date !== timerToday()) { timerState = freshTimerState(); linkedTask = { study: null, project: null }; }
+  const link = linkedTask[key];
+  if (link && link.done) return toast('Already completed today ✅');
+  if (!link) { toast("Generating today's routine…"); api('/api/routine/today', 'POST').then(() => { loadTasks(); toast('Ready — press Start'); }).catch((e) => toast(e.message)); return; }
+  const s = timerState[key];
+  if (s.running) { s.elapsed = elapsedOf(key); s.running = false; s.since = 0; }
+  else {
+    for (const k of Object.keys(TIMER_DEFS)) { if (k !== key && timerState[k].running) { timerState[k].elapsed = elapsedOf(k); timerState[k].running = false; timerState[k].since = 0; } }
+    if (elapsedOf(key) >= TIMER_DEFS[key].target) s.elapsed = 0;
+    s.running = true; s.since = Date.now();
+  }
+  saveTimers(); renderTimers();
+}
+function resetTimer(key) { timerState[key] = { elapsed: 0, running: false, since: 0 }; saveTimers(); renderTimers(); }
+function beep() { try { const ctx = new (window.AudioContext || window.webkitAudioContext)(); const o = ctx.createOscillator(); const g = ctx.createGain(); o.connect(g); g.connect(ctx.destination); o.frequency.value = 880; o.start(); g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.6); o.stop(ctx.currentTime + 0.6); } catch (e) {} }
+function linkFocusTimers(tasks) {
+  for (const key of Object.keys(TIMER_DEFS)) {
+    const t = (tasks || []).find((x) => x.source === 'daily-routine' && x.title && x.title.includes(TIMER_DEFS[key].match));
+    const line = document.getElementById('tm-' + key + '-link');
+    if (!t) { linkedTask[key] = null; if (line) line.innerHTML = 'Today\'s routine not generated yet. <button class="btn" onclick="api(\'/api/routine/today\',\'POST\').then(loadTasks).catch((e)=>toast(e.message))">Generate</button>'; continue; }
+    const done = t.status === 'done';
+    linkedTask[key] = { id: t.id, done };
+    if (done && timerState[key].running) { timerState[key].running = false; timerState[key].elapsed = TIMER_DEFS[key].target; saveTimers(); }
+    if (line) line.textContent = done ? '✅ Completed today' : '🔗 Linked: ' + t.title;
+  }
+  renderTimers();
+}
+function finishTimer(key) {
+  timerState[key].running = false; timerState[key].elapsed = TIMER_DEFS[key].target; saveTimers(); renderTimers();
+  const link = linkedTask[key];
+  beep();
+  if (!link || link.done) return toast('Target reached! 🎉');
+  api('/api/tasks/' + link.id + '/complete', 'POST', { outcome: 'Tracked ' + fmtDur(TIMER_DEFS[key].target) + ' via focus timer' })
+    .then(() => { toast('Target reached — task auto-completed ✅'); loadTasks(); })
+    .catch((e) => toast('Timer done, but task update failed: ' + e.message));
+}
+function renderTimers() {
+  if (timerState.date !== timerToday()) { timerState = freshTimerState(); linkedTask = { study: null, project: null }; }
+  for (const key of Object.keys(TIMER_DEFS)) {
+    const def = TIMER_DEFS[key];
+    const el = elapsedOf(key);
+    const timeEl = document.getElementById('tm-' + key + '-time');
+    const fillEl = document.getElementById('tm-' + key + '-fill');
+    const btnEl = document.getElementById('tm-' + key + '-btn');
+    const cardEl = document.getElementById('tm-' + key);
+    if (!timeEl) continue;
+    const link = linkedTask[key];
+    const done = (link && link.done) || el >= def.target;
+    timeEl.textContent = fmtClock(def.target - Math.min(el, def.target));
+    if (fillEl) fillEl.style.width = Math.min(100, (el / def.target) * 100) + '%';
+    if (btnEl) btnEl.textContent = done ? '✅ Done' : (timerState[key].running ? '⏸ Pause' : (el > 0 ? '▶ Resume' : '▶ Start'));
+    if (cardEl) { cardEl.classList.toggle('running', !!timerState[key].running); cardEl.classList.toggle('done', !!done); }
+    if (el >= def.target && !cardEl.dataset.finished) { cardEl.dataset.finished = '1'; finishTimer(key); }
+    if (el < def.target && cardEl.dataset.finished) delete cardEl.dataset.finished;
+  }
+}
 
 // ----- PLAN -----
 function loadPlan() {
