@@ -405,6 +405,14 @@ footer{color:var(--mut);font-size:11.5px;text-align:center;padding:26px 0 14px}
         <div id="cgpaBacklogs"></div>
         <div style="margin-top:12px"><small id="cgpaNotes"></small></div>
       </div>
+      <div class="card" style="margin-top:12px">
+        <h3>📥 Import semester results (from UAP portal)</h3>
+        <p style="font-size:12.5px;color:var(--mut);margin-bottom:8px">Copy your grade report from <em>ucam.uap-bd.edu</em> and paste one course per line as <code>Course | credits | grade</code>. Retakes auto-match pending backlogs; F grades auto-create backlog entries.</p>
+        <input id="cgpaSem" placeholder="Semester label (e.g. Fall 2026)" style="margin-bottom:8px">
+        <textarea id="cgpaImport" rows="4" style="width:100%" placeholder="Digital Electronics | 3 | 3.50&#10;Accounting | 2 | 3.25"></textarea>
+        <div class="trow"><button class="btn" onclick="importCGPA()">Import &amp; recalculate</button></div>
+        <div id="importStatus" style="font-size:12.5px;margin-top:8px"></div>
+      </div>
     </div>
 
     <!-- Notes -->
@@ -936,9 +944,11 @@ function loadCGPA() {
     const sim = totalCredits > 0 ? (baseQP + backlogBonus + pend * 3.75 + futureQP) / totalCredits : (c.cgpa || 0);
     document.getElementById('cgpaStats').innerHTML = [
       ['Current CGPA', (c.cgpa || 0).toFixed(2), 'warn'],
+      ['Credits', (c.completedCredits || 0) + '/' + (c.totalDegreeCredits || 0), 'ok'],
       ['Projected (backlogs done)', effective.toFixed(3), effective >= 3.0 ? 'ok' : 'warn'],
       ['If all backlogs 3.75', sim.toFixed(3), sim >= 3.0 ? 'ok' : 'warn'],
       ['Target', (c.target || 0).toFixed(1), 'ok'],
+      ['Need avg on rest', o.required && o.required.value !== null ? o.required.value.toFixed(2) : '—', !o.required || o.required.verdict === 'reachable' || o.required.verdict === 'already-secured' ? 'ok' : 'crit'],
       ['GKS cutoff 2.64', (c.cgpa || 0) >= 2.64 ? 'QUALIFY' : 'below', (c.cgpa || 0) >= 2.64 ? 'ok' : 'crit'],
     ].map(([l, n, cls]) => '<div class="stat ' + cls + '"><div class="n">' + n + '</div><div class="l">' + l + '</div></div>').join('');
     document.getElementById('cgpaBacklogs').innerHTML = (c.backlogs || []).map((b, idx) =>
@@ -960,6 +970,16 @@ function setBacklogGrade(idx, grade) {
   saveCGPA();
 }
 function saveCGPA() { api('/api/cgpa', 'POST', CGPA_DATA).then(loadCGPA).catch((e) => toast(e.message)); }
+function importCGPA() {
+  const text = document.getElementById('cgpaImport').value;
+  const semester = document.getElementById('cgpaSem').value.trim();
+  if (!text.trim()) return toast('Paste semester results first');
+  api('/api/cgpa/import', 'POST', { text, semester }).then((r) => {
+    document.getElementById('importStatus').textContent = 'CGPA ' + r.before.cgpa.toFixed(2) + ' → ' + r.after.cgpa.toFixed(2) + ' (' + r.applied.length + ' courses applied)';
+    document.getElementById('cgpaImport').value = '';
+    loadCGPA(); toast('Semester imported ✅');
+  }).catch((e) => { document.getElementById('importStatus').textContent = '⚠️ ' + e.message; });
+}
 
 function loadNotes() {
   api('/api/notes').then((o) => {

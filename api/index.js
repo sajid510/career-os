@@ -982,7 +982,8 @@ app.delete('/api/professors/:id', requireAuth, async (req, res) => {
 // ---- mission: CGPA ----
 app.get('/api/cgpa', requireAuth, async (req, res) => {
   const c = await getDoc('mission/cgpa');
-  res.json({ ok: true, cgpa: c || {} });
+  const { requiredGpa } = require('../lib/cgpa');
+  res.json({ ok: true, cgpa: c || {}, required: c ? requiredGpa(c) : null });
 });
 app.post('/api/cgpa', requireAuth, async (req, res) => {
   const b = req.body || {};
@@ -990,6 +991,23 @@ app.post('/api/cgpa', requireAuth, async (req, res) => {
   ['cgpa', 'completedCredits', 'totalDegreeCredits', 'target', 'backlogs', 'futureSems', 'notes'].forEach((k) => { if (b[k] !== undefined) patch[k] = b[k]; });
   const c = await setDoc('mission/cgpa', patch);
   res.json({ ok: true, cgpa: c });
+});
+app.post('/api/cgpa/import', requireAuth, async (req, res) => {
+  // Paste bridge for the UAP portal grade report. Body: { text?, rows?, semester? }
+  // Row: { course, credits, grade }. One line per course: "Course | credits | grade".
+  const { parseGradeRows, applySemesterResults } = require('../lib/cgpa');
+  const b = req.body || {};
+  let rows = b.rows;
+  if (!rows && b.text) {
+    const parsed = parseGradeRows(b.text);
+    if (parsed.error) return res.status(400).json({ ok: false, error: parsed.error });
+    rows = parsed.rows;
+  }
+  if (!Array.isArray(rows) || !rows.length) return res.status(400).json({ ok: false, error: 'rows (or text) required' });
+  const cur = (await getDoc('mission/cgpa')) || {};
+  const out = applySemesterResults(cur, rows, b.semester || '');
+  await setDoc('mission/cgpa', out.doc, false);
+  res.json({ ok: true, before: out.before, after: out.after, applied: out.applied });
 });
 
 // ---- mission: notes (notebooks) ----
