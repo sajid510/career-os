@@ -988,7 +988,7 @@ app.get('/api/cgpa', requireAuth, async (req, res) => {
 app.post('/api/cgpa', requireAuth, async (req, res) => {
   const b = req.body || {};
   const patch = {};
-  ['cgpa', 'completedCredits', 'totalDegreeCredits', 'attemptedCredits', 'earnedCredits', 'lastSemesterGpa', 'target', 'backlogs', 'futureSems', 'notes'].forEach((k) => { if (b[k] !== undefined) patch[k] = b[k]; });
+  ['cgpa', 'completedCredits', 'totalDegreeCredits', 'attemptedCredits', 'earnedCredits', 'runningCredits', 'lastSemesterGpa', 'target', 'backlogs', 'futureSems', 'notes'].forEach((k) => { if (b[k] !== undefined) patch[k] = b[k]; });
   const c = await setDoc('mission/cgpa', patch);
   res.json({ ok: true, cgpa: c });
 });

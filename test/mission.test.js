@@ -54,7 +54,7 @@ test('CGPA data is internally consistent', () => {
 test('CGPA matches verified Oct-2026 portal snapshot', () => {
   const c = m.CGPA;
   assert.strictEqual(c.cgpa, 2.59);
-  assert.strictEqual(c.completedCredits, 93);
+  assert.strictEqual(c.completedCredits, 76);
   assert.strictEqual(c.backlogs.length, 6);
   assert.strictEqual(c.backlogs.reduce((s, b) => s + b.credits, 0), 17);
   assert.ok(c.backlogs.every((b) => !b.done), 'all backlogs pending');

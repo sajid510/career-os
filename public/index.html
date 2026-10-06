@@ -936,17 +936,18 @@ function loadCGPA() {
     CGPA_DATA = o.cgpa || { backlogs: [] };
     const c = CGPA_DATA;
     const baseQP = (c.cgpa || 0) * (c.completedCredits || 0);
-    const backlogBonus = (c.backlogs || []).filter((b) => b.done).reduce((s, b) => s + (b.newGrade || 0) * b.credits, 0);
     const futureQP = (c.futureSems || []).reduce((s, f) => s + (f.gpa || 0) * f.credits, 0);
-    const totalCredits = (c.completedCredits || 0) + (c.futureSems || []).reduce((s, f) => s + (f.credits || 0), 0);
-    const effective = totalCredits > 0 ? (baseQP + backlogBonus + futureQP) / totalCredits : (c.cgpa || 0);
+    const futureCr = (c.futureSems || []).reduce((s, f) => s + (f.credits || 0), 0);
+    const totalCredits = (c.completedCredits || 0) + futureCr;
+    const effective = totalCredits > 0 ? (baseQP + futureQP) / totalCredits : (c.cgpa || 0);
     const pend = (c.backlogs || []).filter((b) => !b.done).reduce((s, b) => s + b.credits, 0);
-    const sim = totalCredits > 0 ? (baseQP + backlogBonus + pend * 3.75 + futureQP) / totalCredits : (c.cgpa || 0);
+    const simBase = totalCredits + pend;
+    const sim = simBase > 0 ? (baseQP + pend * 3.75 + futureQP) / simBase : (c.cgpa || 0);
     document.getElementById('cgpaStats').innerHTML = [
       ['Current CGPA', (c.cgpa || 0).toFixed(2), 'warn'],
       ['Credits', (c.completedCredits || 0) + '/' + (c.totalDegreeCredits || 0), 'ok'],
-      ['Projected (backlogs done)', effective.toFixed(3), effective >= 3.0 ? 'ok' : 'warn'],
-      ['If all backlogs 3.75', sim.toFixed(3), sim >= 3.0 ? 'ok' : 'warn'],
+      ['Projected (with plan)', effective.toFixed(3), effective >= 3.0 ? 'ok' : 'warn'],
+      ['If backlogs hit 3.75', sim.toFixed(3), sim >= 3.0 ? 'ok' : 'warn'],
       ['Target', (c.target || 0).toFixed(1), 'ok'],
       ['Need avg on rest', o.required && o.required.value !== null ? o.required.value.toFixed(2) : '—', !o.required || o.required.verdict === 'reachable' || o.required.verdict === 'already-secured' ? 'ok' : 'crit'],
       ['GKS cutoff 2.64', (c.cgpa || 0) >= 2.64 ? 'QUALIFY' : 'below', (c.cgpa || 0) >= 2.64 ? 'ok' : 'crit'],
