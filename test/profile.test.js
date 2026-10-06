@@ -5,8 +5,9 @@ const assert = require('node:assert');
 const { PROFILE } = require('../api/lib/profile');
 
 test('profile reflects post-BSc status: no pre-BSc IELTS, current roles and submissions', () => {
-  const blob = JSON.stringify(PROFILE);
-  assert.ok(!/ielts.*2026/i.test(blob), 'no 2026 IELTS commitment remains');
+  const strings = [];
+  JSON.stringify(PROFILE, (k, v) => (typeof v === 'string' ? (strings.push(v), v) : v));
+  assert.ok(!strings.some((s) => /ielts/i.test(s) && /2026/.test(s)), 'no 2026 IELTS commitment remains');
   assert.ok(PROFILE.leadership.some((l) => l.includes('Webmaster') && l.includes('WIE')), 'Webmaster @ WIE present');
   assert.ok(!PROFILE.leadership.some((l) => l.includes('EEE Project Club')), 'EEE Project Club role removed');
   assert.ok(PROFILE.achievements.some((a) => a.includes('Top 38') && a.includes('BEAR Summit 2026')), 'BEAR Summit achievement present');
