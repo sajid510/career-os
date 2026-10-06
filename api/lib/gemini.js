@@ -6,6 +6,14 @@ const {
 } = require('./util');
 const { getSettings } = require('./config');
 const { ensureClassReminders, ensureDeadlineReminders } = require('./reminders');
+const {
+  logTaskOutcome,
+  recordFact,
+  reinforceFact,
+  forgetFact,
+  getRelevantFacts,
+  getMemorySnapshot,
+} = require('./learning');
 
 const GEMINI_URL = 'https://generativelanguage.googleapis.com/v1beta/models';
 
@@ -128,6 +136,21 @@ const TOOL_DEFS = [
     parameters: { type: 'OBJECT', properties: { fact: { type: 'string' }, strength: { type: 'integer', minimum: 1, maximum: 5 } }, required: ['fact'] },
   },
   {
+    name: 'get_relevant_memory',
+    description: 'Get self-learning facts ranked by relevance to a query/phase/category (replaces blind last-N).',
+    parameters: { type: 'OBJECT', properties: { query: { type: 'string' }, phase: { type: 'string' }, category: { type: 'string' }, limit: { type: 'integer', minimum: 1, maximum: 20 } } },
+  },
+  {
+    name: 'reinforce_fact',
+    description: 'Confirm a learned fact (increases strength + confirmCount).',
+    parameters: { type: 'OBJECT', properties: { factId: { type: 'string' } }, required: ['factId'] },
+  },
+  {
+    name: 'forget_fact',
+    description: 'Forget a wrong/outdated learned fact (soft-delete).',
+    parameters: { type: 'OBJECT', properties: { factId: { type: 'string' } }, required: ['factId'] },
+  },
+  {
     name: 'get_system_status',
     description: 'Get status of all connected systems (robowatch, EEE_Academic_OS, team dashboard, career-io, news-pulse).',
     parameters: { type: 'OBJECT', properties: {} },
@@ -210,8 +233,14 @@ async function executeTool(name, args) {
       const doc = await getDoc('tasks/' + args.taskId);
       if (!doc) return { error: 'task not found' };
       await setDoc('tasks/' + args.taskId, { status: 'done', completedAt: nowIso(), outcome: args.outcome || '', rating: args.rating || 0 });
-      await addDoc('learning_events', { ts: nowIso(), type: 'task_outcome', entity: 'task', entityId: args.taskId, text: 'Completed: ' + doc.title + ' | Outcome: ' + (args.outcome || '') , rating: args.rating || 0 });
-      await bumpStats();
+      await logTaskOutcome({
+        taskId: args.taskId,
+        title: doc.title,
+        outcome: args.outcome || '',
+        rating: args.rating || 0,
+        category: doc.category || '',
+        phase: doc.phase || '',
+      });
       return { ok: true };
     }
     case 'list_deadlines': {
@@ -271,15 +300,32 @@ async function executeTool(name, args) {
       return { ok: true, note: 'Received plan text (' + args.text.length + ' chars). Run the dedicated /api/plan/ingest endpoint to fully decompose it.', preview: args.text.slice(0, 500) };
     }
     case 'get_learning_stats': {
-      const stats = await getDoc('learning/stats');
-      const facts = await listDocs('learning_facts');
-      const events = await listDocs('learning_events');
-      return { stats: stats || { taskOutcomes: 0, feedbackCount: 0, corrections: 0 }, facts: facts.map((f) => ({ fact: f.fact, strength: f.strength, source: f.source })).slice(0, 20), recentEvents: events.slice(-10).map((e) => e.text) };
+      const snap = await getMemorySnapshot(10);
+      return { stats: snap.stats || { taskOutcomes: 0, feedbackCount: 0, corrections: 0 }, facts: snap.facts.slice(0, 20).map((f) => ({ id: f.id, fact: f.fact, strength: f.strength, source: f.source })), recentEvents: snap.recentEvents.map((e) => e.text) };
     }
     case 'record_fact': {
-      await addDoc('learning_facts', { fact: args.fact, strength: args.strength || 3, source: 'agent', createdAt: nowIso() });
-      await bumpStats();
-      return { ok: true };
+      const rec = await recordFact({ fact: args.fact, strength: args.strength || 3, source: 'agent' });
+      return { ok: true, id: rec.id, reinforced: !!rec.reinforced };
+    }
+    case 'get_relevant_memory': {
+      const facts = await getRelevantFacts({ query: args.query || '', phase: args.phase || '', category: args.category || '', limit: args.limit || 8 });
+      return { facts: facts.map((f) => ({ id: f.id, fact: f.fact, strength: f.strength, source: f.source })) };
+    }
+    case 'reinforce_fact': {
+      try {
+        const rec = await reinforceFact(args.factId);
+        return { ok: true, fact: rec };
+      } catch (e) {
+        return { error: e.message };
+      }
+    }
+    case 'forget_fact': {
+      try {
+        await forgetFact(args.factId);
+        return { ok: true };
+      } catch (e) {
+        return { error: e.message };
+      }
     }
     case 'get_system_status': {
       const systems = await listDocs('systems');
@@ -343,12 +389,11 @@ async function bumpStats() {
 // ---------------- SYSTEM PROMPT ----------------
 
 async function buildSystemPrompt() {
-  const facts = await listDocs('learning_facts');
-  const events = await listDocs('learning_events');
   const deadlines = await listDocs('deadlines');
   const milestones = await listDocs('milestones');
   const tasks = await listDocs('tasks');
   const schedule = await listDocs('schedule');
+  const events = await listDocs('learning_events');
 
   const today = new Date();
   const activePhase = PHASES.find((p) => p.status === 'active');
@@ -381,8 +426,14 @@ async function buildSystemPrompt() {
 
   const pendingMilestones = milestones.filter((m) => m.status !== 'done').slice(0, 8).map((m) => '  - ' + m.title + ' (' + humanDate(m.dueAt) + ', ' + inDays(m.dueAt) + ')');
 
-  const learnedFacts = facts.slice(-15).map((f) => '  - ' + f.fact + (f.strength ? ' (strength ' + f.strength + ')' : ''));
-  const recentEvents = events.slice(-8).map((e) => '  - ' + e.text);
+  // Phase 1: relevance-ranked memory (tag overlap + strength + recency) instead of blind last-15.
+  const relevantFacts = await getRelevantFacts({
+    limit: 12,
+    phase: activePhase ? activePhase.label : '',
+    query: openTasks.slice(0, 3).join(' '),
+  });
+  const learnedFacts = relevantFacts.map((f) => '  - ' + f.fact + (f.strength ? ' (strength ' + f.strength + ')' : ''));
+  const recentEvents = events.slice(-8).map((e) => '  - [' + (e.type || 'event') + '] ' + e.text);
 
   const lines = [];
   lines.push('You are the default intelligence ("Pulse") inside Sadnan OS, the all-in-one command center that unifies all of Sadnan Sajid\'s automation systems (robowatch, EEE_Academic_OS, robot-oda-dashboard, career-intelligence-agent-os, news-pulse).');

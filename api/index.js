@@ -13,6 +13,15 @@ const { callGemini, buildSystemPrompt, executeTool, TOOL_DEFS, textFrom } = requ
 const { syncAll, syncCareerIo, syncTeamDashboard, ingestConnectorData } = require('./lib/connectors');
 const { ensureClassReminders, ensureDeadlineReminders } = require('./lib/reminders');
 const { buildAuthUrl, syncClassroom, getStatus: getClassroomStatus, HUB_BASE, CALLBACK_PATH } = require('./lib/classroom');
+const {
+  logTaskOutcome,
+  logFeedback,
+  recordFact,
+  reinforceFact,
+  forgetFact,
+  upsertRefinedFacts,
+  getRelevantFacts,
+} = require('./lib/learning');
 const { PHASES: RESTART_PHASES, DEADLINES: RESTART_DEADLINES, MILESTONES: RESTART_MILESTONES, TASKS: RESTART_TASKS, GOALS: RESTART_GOALS, SUMMARY: RESTART_SUMMARY } = require('./lib/plan');
 const { SCHOLARSHIPS, UNIVERSITIES, PROFESSORS, CGPA, NOTES } = require('./lib/mission');
 
@@ -251,15 +260,16 @@ async function agentChat(userMessages) {
   return { text: finalText.trim() || '(agent completed a multi-step task)', toolLog, rounds, done: true };
 }
 
-// ---------- learning refinement ----------
+// ---------- learning refinement (Phase 1: merge, never wipe) ----------
 async function refineLearning() {
   const events = await listDocs('learning_events');
   const facts = await listDocs('learning_facts');
   if (!events.length && !facts.length) return { ok: true, note: 'nothing to refine yet' };
   const s = await getSettings();
   if (!s.geminiKey) return { ok: true, note: 'no gemini key' };
-  const sample = events.slice(-30).map((e) => ' - ' + e.text).join('\n');
-  const existing = facts.map((f) => ' - ' + f.fact).join('\n');
+  const activeFacts = facts.filter((f) => (f.status || 'active') === 'active');
+  const sample = events.slice(-30).map((e) => ' - [' + (e.type || 'event') + '] ' + e.text).join('\n');
+  const existing = activeFacts.map((f) => ' - ' + f.fact).join('\n');
   const prompt =
     'You are the self-learning module of Sadnan OS. From the user\'s learning events and existing facts, distill at most 10 concise, durable facts about how Sadnan works best (preferences, habits, strengths, what to remind him about). Output STRICT JSON array only, e.g. [{"fact":"...","strength":4}]. No markdown.\n' +
     'EXISTING FACTS:\n' + existing + '\nLEARNING EVENTS:\n' + sample;
@@ -273,9 +283,8 @@ async function refineLearning() {
     const textOut = data.candidates && data.candidates[0] ? data.candidates[0].content.parts.map((p) => p.text || '').join('') : '';
     const cleaned = textOut.replace(/```json/gi, '').replace(/```/g, '').trim();
     const arr = JSON.parse(cleaned.slice(cleaned.indexOf('['), cleaned.lastIndexOf(']') + 1));
-    await db.collection('learning_facts').get().then((snap) => { const ops = []; snap.forEach((d) => ops.push(d.ref.delete())); return Promise.all(ops); });
-    for (const f of arr) await addDoc('learning_facts', { fact: f.fact, strength: f.strength || 3, source: 'auto-refine', createdAt: nowIso() });
-    return { ok: true, facts: arr.length };
+    const merged = await upsertRefinedFacts(arr);
+    return { ok: true, facts: merged.total, added: merged.added, reinforced: merged.reinforced };
   } catch (e) {
     return { ok: true, note: 'refine skipped: ' + e.message };
   }
@@ -403,9 +412,24 @@ app.patch('/api/tasks/:id', requireAuth, async (req, res) => {
   if (!doc) return res.status(404).json({ ok: false, error: 'not found' });
   const patch = {};
   ['title', 'description', 'dueAt', 'category', 'priority', 'phase', 'status'].forEach((k) => { if (req.body[k] !== undefined) patch[k] = req.body[k]; });
+  const willComplete = patch.status === 'done' && doc.status !== 'done' && !doc.completedAt;
   if (patch.status === 'done' && !doc.completedAt) patch.completedAt = nowIso();
   if (patch.status && patch.status !== 'done') patch.completedAt = '';
+  if (patch.status === 'done' && (req.body.outcome !== undefined || req.body.rating !== undefined)) {
+    if (req.body.outcome !== undefined) patch.outcome = req.body.outcome;
+    if (req.body.rating !== undefined) patch.rating = req.body.rating;
+  }
   await setDoc('tasks/' + id, patch);
+  if (willComplete) {
+    await logTaskOutcome({
+      taskId: id,
+      title: patch.title || doc.title,
+      outcome: patch.outcome || req.body.outcome || '',
+      rating: patch.rating || req.body.rating || 0,
+      category: patch.category || doc.category || '',
+      phase: patch.phase || doc.phase || '',
+    });
+  }
   res.json({ ok: true });
 });
 app.post('/api/tasks/:id/complete', requireAuth, async (req, res) => {
@@ -415,7 +439,14 @@ app.post('/api/tasks/:id/complete', requireAuth, async (req, res) => {
   const outcome = req.body.outcome || '';
   const rating = req.body.rating || 0;
   await setDoc('tasks/' + id, { status: 'done', completedAt: nowIso(), outcome, rating });
-  await addDoc('learning_events', { ts: nowIso(), type: 'task_outcome', entity: 'task', entityId: id, text: 'Completed: ' + doc.title + (outcome ? ' | ' + outcome : ''), rating });
+  await logTaskOutcome({
+    taskId: id,
+    title: doc.title,
+    outcome,
+    rating,
+    category: doc.category || '',
+    phase: doc.phase || '',
+  });
   res.json({ ok: true });
 });
 app.delete('/api/tasks/:id', requireAuth, async (req, res) => {
@@ -594,35 +625,61 @@ app.post('/api/chat', requireAuth, async (req, res) => {
   }
 });
 
-// ---- feedback (self-learning) ----
+// ---- feedback (self-learning, Phase 1: typed + immediate correction fact) ----
 app.post('/api/feedback', requireAuth, async (req, res) => {
-  const rec = await addDoc('learning_events', {
-    ts: nowIso(), type: 'feedback', entity: req.body.entity || 'general', entityId: req.body.entityId || '',
-    text: req.body.text || '', rating: req.body.rating || 0, correction: req.body.correction || '',
+  const { event, autoFact } = await logFeedback({
+    entity: req.body.entity || 'general',
+    entityId: req.body.entityId || '',
+    text: req.body.text || '',
+    rating: req.body.rating || 0,
+    correction: req.body.correction || '',
+    category: req.body.category || '',
   });
-  const stats = (await getDoc('learning/stats')) || { feedbackCount: 0 };
-  stats.feedbackCount = (stats.feedbackCount || 0) + 1;
-  stats.lastUpdated = nowIso();
-  await setDoc('learning/stats', stats, false);
-  if (req.body.correction) {
-    const stats2 = await getDoc('learning/stats');
-    stats2.corrections = (stats2.corrections || 0) + 1;
-    await setDoc('learning/stats', stats2, false);
-  }
-  res.json({ ok: true, event: rec });
+  res.json({ ok: true, event, autoFact });
 });
 
-// ---- learning ----
+// ---- learning (Phase 1: relevance-ranked + lifecycle) ----
 app.get('/api/learning', requireAuth, async (req, res) => {
   const stats = await getDoc('learning/stats');
   const facts = await listDocs('learning_facts');
   const events = await listDocs('learning_events');
+  const active = facts.filter((f) => (f.status || 'active') === 'active');
   res.json({
     ok: true,
     stats: stats || {},
-    facts: facts.map((f) => ({ fact: f.fact, strength: f.strength, source: f.source })),
+    facts: active.map((f) => ({ id: f.id, fact: f.fact, strength: f.strength, source: f.source, tags: f.tags || [], confirmCount: f.confirmCount || 1, status: f.status || 'active', lastUsed: f.lastUsed || '' })),
     events: events.sort((a, b) => (b.ts || '').localeCompare(a.ts || '')).slice(0, 50),
   });
+});
+app.get('/api/learning/relevant', requireAuth, async (req, res) => {
+  const facts = await getRelevantFacts({
+    limit: Math.min(20, parseInt(req.query.limit, 10) || 12),
+    phase: req.query.phase || '',
+    category: req.query.category || '',
+    query: req.query.query || req.query.q || '',
+  });
+  res.json({ ok: true, facts: facts.map((f) => ({ id: f.id, fact: f.fact, strength: f.strength, source: f.source, tags: f.tags || [], confirmCount: f.confirmCount || 1, score: f._score })) });
+});
+app.post('/api/learning/fact', requireAuth, async (req, res) => {
+  if (!req.body.fact) return res.status(400).json({ ok: false, error: 'fact required' });
+  const rec = await recordFact({ fact: req.body.fact, strength: req.body.strength, source: 'manual' });
+  res.json({ ok: true, fact: rec });
+});
+app.post('/api/learning/fact/:id/reinforce', requireAuth, async (req, res) => {
+  try {
+    const rec = await reinforceFact(req.params.id);
+    res.json({ ok: true, fact: rec });
+  } catch (e) {
+    res.status(404).json({ ok: false, error: e.message });
+  }
+});
+app.delete('/api/learning/fact/:id', requireAuth, async (req, res) => {
+  try {
+    await forgetFact(req.params.id);
+    res.json({ ok: true });
+  } catch (e) {
+    res.status(404).json({ ok: false, error: e.message });
+  }
 });
 
 // ---- devices (FCM tokens) ----
