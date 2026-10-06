@@ -577,10 +577,11 @@ function syncSystems() { toast('Syncing connectors...'); api('/api/systems/sync'
 // ----- TASKS -----
 function loadTasks() {
   api('/api/tasks').then((o) => {
-    document.getElementById('tasksList').innerHTML = o.tasks.length
-      ? o.tasks.map((t) => '<div class="tbl-row"><button onclick="setTask(\'' + t.id + '\',\'done\')" title="Complete">✅</button><div class="t" style="' + (t.status === 'done' ? 'text-decoration:line-through;color:var(--mut)' : '') + '">' + esc(t.title) + ' <span class="tag">' + esc(t.category) + '</span>' + (t.dueAt ? ' <span class="tag ' + (t.human === 'TODAY' ? 'today' : t.human.startsWith('in 0') || t.human.startsWith('in 1') ? 'soon' : '') + '">' + esc(t.human) + '</span>' : '') + '</div><select onchange="setTask(\'' + t.id + '\',this.value)"><option value="open" ' + (t.status === 'open' ? 'selected' : '') + '>Open</option><option value="in_progress" ' + (t.status === 'in_progress' ? 'selected' : '') + '>In progress</option><option value="blocked" ' + (t.status === 'blocked' ? 'selected' : '') + '>Blocked</option><option value="done" ' + (t.status === 'done' ? 'selected' : '') + '>Done</option></select><button onclick="del(\'/api/tasks/\'+\'' + t.id + '\', loadTasks)" title="Delete">🗑️</button></div>').join('')
+    const tasks = o.tasks || [];
+    document.getElementById('tasksList').innerHTML = tasks.length
+      ? tasks.map((t) => '<div class="tbl-row"><button onclick="setTask(\'' + t.id + '\',\'done\')" title="Complete">✅</button><div class="t" style="' + (t.status === 'done' ? 'text-decoration:line-through;color:var(--mut)' : '') + '">' + esc(t.title) + ' <span class="tag">' + esc(t.category) + '</span>' + (t.dueAt ? ' <span class="tag ' + (t.human === 'TODAY' ? 'today' : t.human.startsWith('in 0') || t.human.startsWith('in 1') ? 'soon' : '') + '">' + esc(t.human) + '</span>' : '') + '</div><select onchange="setTask(\'' + t.id + '\',this.value)"><option value="open" ' + (t.status === 'open' ? 'selected' : '') + '>Open</option><option value="in_progress" ' + (t.status === 'in_progress' ? 'selected' : '') + '>In progress</option><option value="blocked" ' + (t.status === 'blocked' ? 'selected' : '') + '>Blocked</option><option value="done" ' + (t.status === 'done' ? 'selected' : '') + '>Done</option></select><button onclick="del(\'/api/tasks/\'+\'' + t.id + '\', loadTasks)" title="Delete">🗑️</button></div>').join('')
       : '<div class="empty">No tasks yet</div>';
-    linkFocusTimers(o.tasks);
+    linkFocusTimers(tasks);
   }).catch((e) => toast('Tasks: ' + e.message));
 }
 function addTask() {
@@ -647,21 +648,27 @@ function finishTimer(key) {
 function renderTimers() {
   if (timerState.date !== timerToday()) { timerState = freshTimerState(); linkedTask = { study: null, project: null }; }
   for (const key of Object.keys(TIMER_DEFS)) {
-    const def = TIMER_DEFS[key];
-    const el = elapsedOf(key);
-    const timeEl = document.getElementById('tm-' + key + '-time');
-    const fillEl = document.getElementById('tm-' + key + '-fill');
-    const btnEl = document.getElementById('tm-' + key + '-btn');
-    const cardEl = document.getElementById('tm-' + key);
-    if (!timeEl) continue;
-    const link = linkedTask[key];
-    const done = (link && link.done) || el >= def.target;
-    timeEl.textContent = fmtClock(def.target - Math.min(el, def.target));
-    if (fillEl) fillEl.style.width = Math.min(100, (el / def.target) * 100) + '%';
-    if (btnEl) btnEl.textContent = done ? '✅ Done' : (timerState[key].running ? '⏸ Pause' : (el > 0 ? '▶ Resume' : '▶ Start'));
-    if (cardEl) { cardEl.classList.toggle('running', !!timerState[key].running); cardEl.classList.toggle('done', !!done); }
-    if (el >= def.target && !cardEl.dataset.finished) { cardEl.dataset.finished = '1'; finishTimer(key); }
-    if (el < def.target && cardEl.dataset.finished) delete cardEl.dataset.finished;
+    try {
+      const def = TIMER_DEFS[key];
+      const el = elapsedOf(key);
+      const timeEl = document.getElementById('tm-' + key + '-time');
+      const fillEl = document.getElementById('tm-' + key + '-fill');
+      const btnEl = document.getElementById('tm-' + key + '-btn');
+      const cardEl = document.getElementById('tm-' + key);
+      if (!timeEl || !cardEl) continue;
+      const link = linkedTask[key];
+      const done = (link && link.done) || el >= def.target;
+      timeEl.textContent = fmtClock(def.target - Math.min(el, def.target));
+      if (fillEl) fillEl.style.width = Math.min(100, (el / def.target) * 100) + '%';
+      if (btnEl) btnEl.textContent = done ? '✅ Done' : (timerState[key].running ? '⏸ Pause' : (el > 0 ? '▶ Resume' : '▶ Start'));
+      cardEl.classList.toggle('running', !!timerState[key].running);
+      cardEl.classList.toggle('done', !!done);
+      if (el >= def.target && !cardEl.dataset.finished) { cardEl.dataset.finished = '1'; finishTimer(key); }
+      if (el < def.target && cardEl.dataset.finished) delete cardEl.dataset.finished;
+    } catch (err) {
+      const line = document.getElementById('tm-' + key + '-link');
+      if (line) line.textContent = '⚠️ Timer error: ' + (err && err.message ? err.message : err);
+    }
   }
 }
 
