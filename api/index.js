@@ -9,7 +9,10 @@ const {
 const { getSettings, saveSettings, getHubToken, setHubToken } = require('../lib/config');
 const { PROFILE } = require('../lib/profile');
 const { DEADLINES, PHASES, MILESTONES, TASKS, GOALS } = require('../lib/seed');
-const { callGemini, buildSystemPrompt, executeTool, TOOL_DEFS, textFrom } = require('../lib/gemini');
+const { callGemini, resilientCall, buildSystemPrompt, executeTool, TOOL_DEFS, textFrom } = require('../lib/gemini');
+const { bumpStat } = require('../lib/learning');
+const { detectSlips } = require('../lib/proactive');
+const { judgeRecentConversations } = require('../lib/eval');
 const { syncAll, syncCareerIo, syncTeamDashboard, ingestConnectorData } = require('../lib/connectors');
 const { ensureClassReminders, ensureDeadlineReminders } = require('../lib/reminders');
 const { ensureDailyRoutine } = require('../lib/routine');
@@ -215,13 +218,15 @@ async function applyDecomposedPlan(plan) {
   return out;
 }
 
-// ---------- chat ----------
-async function agentChat(userMessages) {
+// ---------- chat (Phase A: multi-turn history + progress events + resilient model) ----------
+async function agentChat(userMessages, onEvent) {
+  const emit = onEvent || (() => {});
   const sys = await buildSystemPrompt();
   const contents = [];
-  for (const m of userMessages) {
+  const history = (userMessages || []).slice(-20);
+  for (const m of history) {
     if (!m || !m.content) continue;
-    contents.push({ role: m.role === 'assistant' ? 'model' : 'user', parts: [{ text: String(m.content) }] });
+    contents.push({ role: m.role === 'assistant' ? 'model' : 'user', parts: [{ text: String(m.content).slice(0, 8000) }] });
   }
   if (!contents.length) contents.push({ role: 'user', parts: [{ text: 'Hello' }] });
   let finalText = '';
@@ -229,12 +234,13 @@ async function agentChat(userMessages) {
   let rounds = 0;
   for (let i = 0; i < 8; i++) {
     rounds = i + 1;
-    const content = await callGemini(sys, contents, TOOL_DEFS);
+    const content = await resilientCall(sys, contents, TOOL_DEFS);
     if (!content) return { text: finalText.trim(), toolLog, rounds, done: true };
     const funcCalls = content.parts.filter((p) => p.functionCall);
     if (!funcCalls.length) {
       const t = textFrom(content);
       if (t) finalText += t;
+      emit({ type: 'text', text: finalText.trim() });
       return { text: finalText.trim(), toolLog, rounds, done: true };
     }
     const results = [];
@@ -249,6 +255,7 @@ async function agentChat(userMessages) {
       }
       results.push(res);
       toolLog.push({ name, args });
+      emit({ type: 'tool', name });
       const outText = res && res.title ? res.title : (res && res.ok ? 'ok' : JSON.stringify(res).slice(0, 80));
       finalText += '[' + name + ' → ' + outText + '] ';
     }
@@ -259,6 +266,28 @@ async function agentChat(userMessages) {
     });
   }
   return { text: finalText.trim() || '(agent completed a multi-step task)', toolLog, rounds, done: true };
+}
+
+async function storeConversation(userText, result, model) {
+  try {
+    const rec = await addDoc('conversations', {
+      user: String(userText || '').slice(0, 4000),
+      assistant: String(result.text || '').slice(0, 8000),
+      tools: (result.toolLog || []).map((t) => t.name),
+      rounds: result.rounds || 0,
+      model: model || '',
+      rated: false,
+      createdAt: nowIso(),
+    });
+    const all = await listDocs('conversations');
+    if (all.length > 50) {
+      const old = all.sort((a, b) => (a.createdAt || '').localeCompare(b.createdAt || '')).slice(0, all.length - 50);
+      for (const c of old) await deleteDoc('conversations/' + c.id);
+    }
+    return rec;
+  } catch (e) {
+    return null;
+  }
 }
 
 // ---------- learning refinement (Phase 1: merge, never wipe) ----------
@@ -633,16 +662,48 @@ app.delete('/api/schedule/:id', requireAuth, async (req, res) => {
   res.json({ ok: true });
 });
 
-// ---- chat ----
+// ---- chat (Phase A/B: history in, conversation stored, SSE stream available) ----
 app.post('/api/chat', requireAuth, async (req, res) => {
   try {
     const messages = req.body.messages || [];
+    const lastUser = messages.filter((m) => m && m.content && m.role !== 'assistant').slice(-1)[0];
+    await bumpStat('chatMessages');
     const result = await agentChat(messages);
-    res.json({ ok: true, text: result.text, toolLog: result.toolLog || [] });
+    const s = await getSettings();
+    const convo = await storeConversation(lastUser ? lastUser.content : '', result, s.geminiModel);
+    res.json({ ok: true, text: result.text, toolLog: result.toolLog || [], rounds: result.rounds, conversationId: convo ? convo.id : null });
   } catch (e) {
     console.error('chat error', e);
     res.status(500).json({ ok: false, error: e.message });
   }
+});
+app.post('/api/chat/stream', requireAuth, async (req, res) => {
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+  const send = (obj) => { try { res.write('data: ' + JSON.stringify(obj) + '\n\n'); } catch (e) {} };
+  let closed = false;
+  req.on('close', () => { closed = true; });
+  try {
+    const messages = req.body.messages || [];
+    const lastUser = messages.filter((m) => m && m.content && m.role !== 'assistant').slice(-1)[0];
+    await bumpStat('chatMessages');
+    send({ type: 'status', text: 'Pulse is thinking…' });
+    const result = await agentChat(messages, (ev) => { if (!closed) send(ev); });
+    const s = await getSettings();
+    const convo = await storeConversation(lastUser ? lastUser.content : '', result, s.geminiModel);
+    if (!closed) send({ type: 'done', text: result.text, toolLog: result.toolLog || [], rounds: result.rounds, conversationId: convo ? convo.id : null });
+    res.end();
+  } catch (e) {
+    console.error('chat stream error', e);
+    if (!closed) send({ type: 'error', error: e.message });
+    res.end();
+  }
+});
+app.get('/api/conversations', requireAuth, async (req, res) => {
+  const items = await listDocs('conversations');
+  items.sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
+  res.json({ ok: true, conversations: items.slice(0, 20).map((c) => ({ id: c.id, user: c.user, assistant: (c.assistant || '').slice(0, 2000), tools: c.tools || [], rounds: c.rounds || 0, rated: !!c.rated, judgeScore: c.judgeScore || null, createdAt: c.createdAt })) });
 });
 
 // ---- feedback (self-learning, Phase 1: typed + immediate correction fact) ----
@@ -655,6 +716,9 @@ app.post('/api/feedback', requireAuth, async (req, res) => {
     correction: req.body.correction || '',
     category: req.body.category || '',
   });
+  if (req.body.conversationId) {
+    try { await setDoc('conversations/' + req.body.conversationId, { rated: true }); } catch (e) {}
+  }
   res.json({ ok: true, event, autoFact });
 });
 
@@ -734,7 +798,7 @@ app.get('/api/settings', requireAuth, async (req, res) => {
   res.json({
     ok: true,
     settings: {
-      hubName: s.hubName, hubTagline: s.hubTagline, ownerEmail: s.ownerEmail, geminiModel: s.geminiModel,
+      hubName: s.hubName, hubTagline: s.hubTagline, ownerEmail: s.ownerEmail, geminiModel: s.geminiModel, judgeModel: s.judgeModel,
       careerIoWebhook: s.careerIoWebhook ? 'set' : '', careerIoSpreadsheetUrl: s.careerIoSpreadsheetUrl || '',
       robotDbUrl: s.robotDbUrl, systemsEnabled: s.systemsEnabled || {}, reminderLeadMinutes: s.reminderLeadMinutes,
       classroomClientIdSet: !!s.classroomClientId, classroomConnected: !!s.classroomRefreshToken,
@@ -742,7 +806,7 @@ app.get('/api/settings', requireAuth, async (req, res) => {
   });
 });
 app.post('/api/settings', requireAuth, async (req, res) => {
-  const allowed = ['hubName', 'hubTagline', 'ownerEmail', 'geminiModel', 'careerIoWebhook', 'careerIoSecret', 'careerIoSpreadsheetUrl', 'robotDbUrl', 'systemsEnabled', 'reminderLeadMinutes', 'classroomClientId', 'classroomClientSecret'];
+  const allowed = ['hubName', 'hubTagline', 'ownerEmail', 'geminiModel', 'judgeModel', 'careerIoWebhook', 'careerIoSecret', 'careerIoSpreadsheetUrl', 'robotDbUrl', 'systemsEnabled', 'reminderLeadMinutes', 'classroomClientId', 'classroomClientSecret'];
   const patch = {};
   allowed.forEach((k) => { if (req.body[k] !== undefined) patch[k] = req.body[k]; });
   if (req.body.geminiKey) patch.geminiKey = req.body.geminiKey;
@@ -989,7 +1053,9 @@ app.post('/api/cron/daily', requireAuth, async (req, res) => {
     if (todayClasses.length) brief += ' Classes today (' + DAY_SHORT[todayDow] + '): ' + todayClasses.map((c) => c.title + ' at ' + c.startTime + (c.room ? ' (Rm ' + c.room + ')' : '')).join('; ') + '.';
     if (countdowns.length) brief += ' Deadlines ahead: ' + countdowns.map((d) => d.title + ' (' + inDays(d.dueAt) + ')').join('; ') + '.';
     await notify('Morning brief', brief, 'agent', 'info', { source: 'daily' });
-    res.json({ ok: true, brief, routine, reminders, classReminders, dlReminders, deadlinePings, connectors });
+    let slips = { sent: false };
+    try { slips = await detectSlips(); } catch (e) { slips = { sent: false, error: e.message }; }
+    res.json({ ok: true, brief, routine, reminders, classReminders, dlReminders, deadlinePings, connectors, slips });
   } catch (e) {
     res.status(500).json({ ok: false, error: e.message });
   }
@@ -1001,7 +1067,9 @@ app.post('/api/cron/weekly', requireAuth, async (req, res) => {
     const events = await listDocs('learning_events');
     const completed = tasks.filter((t) => t.status === 'done' && t.completedAt && daysUntil(t.completedAt) >= -7);
     await notify('Weekly review', 'This week: ' + completed.length + ' task' + (completed.length === 1 ? '' : 's') + ' completed. Systems synced: ' + Object.keys(connectors).join(', ') + '.', 'agent', 'info', { source: 'weekly' });
-    res.json({ ok: true, completed: completed.length, connectors });
+    let judging = { judged: 0 };
+    try { judging = await judgeRecentConversations(5); } catch (e) { judging = { error: e.message }; }
+    res.json({ ok: true, completed: completed.length, connectors, judging });
   } catch (e) {
     res.status(500).json({ ok: false, error: e.message });
   }

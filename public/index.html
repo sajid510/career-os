@@ -419,9 +419,12 @@ footer{color:var(--mut);font-size:11.5px;text-align:center;padding:26px 0 14px}
       <h3>🤖 Pulse — your career intelligence</h3>
       <p style="font-size:12.5px;color:var(--mut);margin-bottom:8px">It knows your full profile, current plan, deadlines and what it has learned about you. Try: <em>"What should I focus on this week?"</em> or <em>"Add a reminder for paper submission"</em>.</p>
       <div class="chat" id="chat"></div>
+      <div id="chatHist" class="hidden" style="margin-top:8px"></div>
       <div class="chat-inline">
         <input id="chatInput" placeholder="Ask Pulse...">
-        <button class="btn" onclick="sendChat()">Send</button>
+        <button class="btn" id="micBtn" onclick="toggleMic()" title="Voice input">🎤</button>
+        <button class="btn" id="sendBtn" onclick="sendOrStop()">Send</button>
+        <button class="btn" onclick="toggleHistory()">📜</button>
       </div>
     </div>
   </section>
@@ -442,6 +445,7 @@ footer{color:var(--mut);font-size:11.5px;text-align:center;padding:26px 0 14px}
       <div class="row">
         <input id="sGemini" placeholder="Gemini API key (only shown as set)">
         <select id="sModel"><option value="gemini-flash-latest">Gemini Flash Latest (recommended)</option><option value="gemini-3.6-flash">Gemini 3.6 Flash</option><option value="gemini-3.1-flash-lite">Gemini 3.1 Flash Lite</option><option value="gemini-3-pro-preview">Gemini 3 Pro</option><option value="gemini-2.5-pro">Gemini 2.5 Pro (legacy)</option></select>
+        <input id="sJudge" placeholder="Judge model (default gemini-flash-lite-latest)" style="margin-top:6px">
         <button class="btn" onclick="saveSettings()">Save</button>
       </div>
       <div class="settings-row"><div class="l">Owner email</div><div class="v" id="sEmail"></div></div>
@@ -525,7 +529,7 @@ document.querySelectorAll('nav button').forEach((b) => b.addEventListener('click
   if (tab === 'mission') loadMission();
   if (tab === 'learning') loadLearning();
   if (tab === 'settings') loadSettings();
-  if (tab === 'ai') document.getElementById('chatInput').focus();
+  if (tab === 'ai') { restoreChatLog(); document.getElementById('chatInput').focus(); }
 }));
 
 function init() {
@@ -967,16 +971,75 @@ function loadNotes() {
   }).catch((e) => toast(e.message));
 }
 
-// ----- AI -----
+// ----- AI (Phase A/B/C: streaming, memory, markdown, voice, ratings, history) -----
 let chatBusy = false;
-function pushMsg(role, text) {
+let chatAbort = null;
+let lastConversationId = null;
+function chatDay() { const d = new Date(); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); }
+function chatLogKey() { return 'pulseChat.' + chatDay(); }
+function readChatLog() { try { const l = JSON.parse(localStorage.getItem(chatLogKey())); return Array.isArray(l) ? l.slice(-100) : []; } catch (e) { return []; } }
+function appendChatLog(role, text) { try { const l = readChatLog(); l.push({ role, text: String(text).slice(0, 4000) }); localStorage.setItem(chatLogKey(), JSON.stringify(l.slice(-100))); } catch (e) {} }
+// Minimal markdown: code blocks, inline code, bold, italic, lists, line breaks.
+function md(src) {
+  let h = esc(src);
+  const blocks = [];
+  h = h.replace(/```([\s\S]*?)```/g, (m, c) => { blocks.push('<pre>' + c + '</pre>'); return '\u0000' + (blocks.length - 1) + '\u0000'; });
+  h = h.replace(/`([^`\n]+)`/g, '<code>$1</code>');
+  h = h.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+  h = h.replace(/(^|[\s(])\*([^*\n]+)\*/g, '$1<em>$2</em>');
+  h = h.replace(/^### (.*)$/gm, '<strong>$1</strong>').replace(/^## (.*)$/gm, '<strong>$1</strong>');
+  h = h.replace(/^(?:- |\* )(.*)$/gm, '• $1').replace(/^\d+\. (.*)$/gm, '• $1');
+  h = h.replace(/\u0000(\d+)\u0000/g, (m, i) => blocks[+i]);
+  return h.replace(/\n/g, '<br>');
+}
+function pushMsg(role, text, convoId) {
   const chat = document.getElementById('chat');
   const d = document.createElement('div');
   d.className = 'msg ' + role;
-  d.textContent = text;
+  if (role === 'ai') {
+    d.innerHTML = md(text);
+    if (convoId) {
+      const fb = document.createElement('div');
+      fb.style.cssText = 'margin-top:6px;font-size:12px';
+      fb.innerHTML = '<button class="btn" style="padding:2px 8px" onclick="rateChat(\'' + convoId + '\',5,this)">👍</button> <button class="btn" style="padding:2px 8px" onclick="rateChat(\'' + convoId + '\',2,this)">👎</button>';
+      d.appendChild(fb);
+    }
+  } else d.textContent = text;
   chat.appendChild(d);
   chat.scrollTop = chat.scrollHeight;
+  appendChatLog(role, text);
 }
+function rateChat(convoId, rating, btn) {
+  api('/api/feedback', 'POST', { entity: 'chat', entityId: convoId, text: 'chat rating', rating, conversationId: convoId })
+    .then(() => { if (btn && btn.parentNode) btn.parentNode.textContent = rating >= 5 ? 'Thanks! ✅' : 'Noted — will improve ✅'; })
+    .catch((e) => toast(e.message));
+}
+function chatHistory() {
+  const log = readChatLog();
+  const out = [];
+  for (let i = Math.max(0, log.length - 20); i < log.length; i++) out.push({ role: log[i].role === 'assistant' ? 'assistant' : 'user', content: log[i].text });
+  return out;
+}
+function restoreChatLog() {
+  const chat = document.getElementById('chat');
+  if (chat.children.length) return;
+  for (const m of readChatLog()) {
+    const d = document.createElement('div');
+    d.className = 'msg ' + (m.role === 'ai' ? 'ai' : 'user');
+    if (m.role === 'ai') d.innerHTML = md(m.text); else d.textContent = m.text;
+    chat.appendChild(d);
+  }
+  chat.scrollTop = chat.scrollHeight;
+}
+function toggleHistory() {
+  const el = document.getElementById('chatHist');
+  if (!el.classList.contains('hidden')) { el.classList.add('hidden'); el.innerHTML = ''; return; }
+  api('/api/conversations').then((r) => {
+    el.innerHTML = (r.conversations || []).map((c) => '<div class="item"><div class="txt"><div class="t">' + esc((c.user || '').slice(0, 120)) + '</div><div class="d">' + esc((c.assistant || '').slice(0, 160)) + (c.judgeScore ? ' · judge ' + c.judgeScore + '/5' : '') + '</div></div></div>').join('') || '<div class="empty">No past chats</div>';
+    el.classList.remove('hidden');
+  }).catch((e) => toast(e.message));
+}
+function sendOrStop() { if (chatBusy && chatAbort) { chatAbort.abort(); return; } sendChat(); }
 function sendChat() {
   if (chatBusy) return;
   const inp = document.getElementById('chatInput');
@@ -985,20 +1048,78 @@ function sendChat() {
   inp.value = '';
   pushMsg('user', text);
   chatBusy = true;
+  document.getElementById('sendBtn').textContent = '⏹ Stop';
   const typing = document.createElement('div');
   typing.className = 'typing';
+  typing.id = 'typingRow';
   typing.textContent = 'Pulse is thinking...';
   document.getElementById('chat').appendChild(typing);
-  api('/api/chat', 'POST', { messages: [{ role: 'user', content: text }] }).then((r) => {
-    typing.remove();
-    if (r.toolLog && r.toolLog.length) {
-      const tl = document.createElement('div');
-      tl.className = 'msg tool';
-      tl.textContent = '⚙️ ' + r.toolLog.map((t) => t.name).join(' → ');
-      document.getElementById('chat').appendChild(tl);
+  const toolLine = document.createElement('div');
+  toolLine.className = 'msg tool hidden';
+  document.getElementById('chat').appendChild(toolLine);
+  const ctrl = new AbortController();
+  chatAbort = ctrl;
+  const hist = chatHistory();
+  hist.push({ role: 'user', content: text });
+  const aiDiv = document.createElement('div');
+  aiDiv.className = 'msg ai';
+  let settled = false;
+  const finish = () => { if (settled) return; settled = true; chatBusy = false; chatAbort = null; document.getElementById('sendBtn').textContent = 'Send'; const t = document.getElementById('typingRow'); if (t) t.remove(); };
+  fetch('/api/chat/stream', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'x-hub-token': HUB },
+    body: JSON.stringify({ messages: hist }),
+    signal: ctrl.signal,
+  }).then(async (r) => {
+    const reader = r.body.getReader();
+    const dec = new TextDecoder();
+    let buf = '';
+    const tools = [];
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buf += dec.decode(value, { stream: true });
+      const parts = buf.split('\n\n');
+      buf = parts.pop();
+      for (const p of parts) {
+        const line = p.trim();
+        if (!line.startsWith('data:')) continue;
+        const ev = JSON.parse(line.slice(5));
+        if (ev.type === 'tool') { tools.push(ev.name); toolLine.classList.remove('hidden'); toolLine.textContent = '⚙️ ' + tools.join(' → '); }
+        else if (ev.type === 'done') {
+          lastConversationId = ev.conversationId || null;
+          aiDiv.innerHTML = md(ev.text || '(no response)');
+          if (lastConversationId) {
+            const fb = document.createElement('div');
+            fb.style.cssText = 'margin-top:6px;font-size:12px';
+            fb.innerHTML = '<button class="btn" style="padding:2px 8px" onclick="rateChat(\'' + lastConversationId + '\',5,this)">👍</button> <button class="btn" style="padding:2px 8px" onclick="rateChat(\'' + lastConversationId + '\',2,this)">👎</button>';
+            aiDiv.appendChild(fb);
+          }
+          document.getElementById('chat').appendChild(aiDiv);
+          document.getElementById('chat').scrollTop = document.getElementById('chat').scrollHeight;
+          appendChatLog('ai', ev.text || '');
+          finish();
+        } else if (ev.type === 'error') { pushMsg('ai', '⚠️ ' + ev.error); finish(); }
+      }
     }
-    pushMsg('ai', r.text || '(no response)');
-  }).catch((e) => { typing.remove(); pushMsg('ai', '⚠️ ' + e.message); }).finally(() => { chatBusy = false; });
+  }).catch((e) => {
+    if (e && e.name === 'AbortError') toast('Stopped');
+    else pushMsg('ai', '⚠️ ' + e.message);
+    finish();
+  });
+}
+let recog = null;
+function toggleMic() {
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SR) return toast('Voice input not supported in this browser');
+  if (recog) { recog.stop(); recog = null; return; }
+  recog = new SR();
+  recog.lang = 'en-US';
+  recog.interimResults = false;
+  recog.onresult = (e) => { document.getElementById('chatInput').value = e.results[0][0].transcript; };
+  recog.onend = () => { recog = null; };
+  recog.onerror = (e) => { recog = null; toast('Mic: ' + e.error); };
+  try { recog.start(); toast('Listening…'); } catch (e) { recog = null; }
 }
 document.getElementById('chatInput').addEventListener('keydown', (e) => { if (e.key === 'Enter') sendChat(); });
 
@@ -1029,6 +1150,7 @@ function loadSettings() {
     document.getElementById('sCareer').textContent = s.careerIoWebhook ? 'configured' : 'not configured';
     document.getElementById('sToken').textContent = localStorage.getItem('hubToken');
     document.getElementById('sModel').value = s.geminiModel || 'gemini-flash-latest';
+    document.getElementById('sJudge').value = s.judgeModel || '';
     loadClassroom();
   }).catch((e) => toast(e.message));
 }
@@ -1036,6 +1158,8 @@ function saveSettings() {
   const gemini = document.getElementById('sGemini').value.trim();
   const model = document.getElementById('sModel').value;
   const body = { geminiModel: model };
+  const judge = document.getElementById('sJudge').value.trim();
+  if (judge) body.judgeModel = judge;
   if (gemini) body.geminiKey = gemini;
   api('/api/settings', 'POST', body).then((r) => { document.getElementById('sGemini').value = ''; localStorage.setItem('geminiSet', r.geminiKeySet ? '1' : '0'); loadSettings(); toast('Saved' + (r.geminiKeySet ? ' — AI active' : '')); }).catch((e) => toast(e.message));
 }
