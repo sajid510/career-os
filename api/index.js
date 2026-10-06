@@ -365,7 +365,7 @@ app.get('/api/overview', requireAuth, async (req, res) => {
         milestonesTotal: milestones.length,
         unreadNotifications: unread,
       },
-      dueTodayTasks: dueToday.map((t) => ({ id: t.id, title: t.title, category: t.category, priority: t.priority })),
+      dueTodayTasks: dueToday.map((t) => ({ id: t.id, title: t.title, category: t.category, priority: t.priority, source: t.source || '' })),
       todayClasses: todayClasses,
       nextDeadlines: nextDeadlines.map((d) => ({ id: d.id, title: d.title, human: inDays(d.dueAt), date: humanDate(d.dueAt), critical: !!d.critical, category: d.category })),
       notifications: recentNotifications.map((n) => ({ id: n.id, title: n.title, body: n.body, type: n.type, read: n.read, createdAt: n.createdAt })),

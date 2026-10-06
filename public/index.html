@@ -135,6 +135,7 @@ section{animation:fade .2s ease}
 .settings-row .v{font-size:13.5px;word-break:break-all}
 small{color:var(--mut)}
 .empty{color:var(--mut);font-size:13px;padding:14px 0;text-align:center}
+.tag.live{color:var(--ok);border-color:var(--ok)}
 .tcard{background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:14px}
 .tcard.running{border-color:var(--ok)}
 .tcard.done{border-color:var(--acc)}
@@ -553,8 +554,13 @@ function loadOverview() {
     ].map(([l, n, cls]) => '<div class="stat ' + cls + '"><div class="n">' + n + '</div><div class="l">' + l + '</div></div>').join('');
 
     document.getElementById('dueToday').innerHTML = o.dueTodayTasks.length
-      ? o.dueTodayTasks.map((t) => '<div class="item"><div class="dot ' + (t.priority === 'critical' ? 'crit' : 'high') + '"></div><div class="txt"><div class="t">' + esc(t.title) + '</div><div class="d">' + esc(t.category) + '</div></div></div>').join('')
+      ? o.dueTodayTasks.map((t) => {
+        const routineKey = t.source === 'daily-routine' ? (t.title.includes('Academic study') ? 'study' : (t.title.includes('Project / technical') ? 'project' : '')) : '';
+        if (routineKey && (!linkedTask[routineKey] || !linkedTask[routineKey].done)) linkedTask[routineKey] = { id: t.id, done: false };
+        return '<div class="item"><div class="dot ' + (t.priority === 'critical' ? 'crit' : 'high') + '"></div><div class="txt"><div class="t">' + esc(t.title) + '</div><div class="d">' + esc(t.category) + (routineKey ? ' <span class="tag live" id="ov-' + routineKey + '">⏱ ' + TIMER_DEFS[routineKey].targetLabel + ' left</span>' : '') + '</div></div></div>';
+      }).join('')
       : '<div class="empty">Nothing due today ✅</div>';
+    renderTimers();
 
     document.getElementById('nextDeadlines').innerHTML = o.nextDeadlines.length
       ? o.nextDeadlines.map((d) => '<div class="item"><div class="dot ' + (d.critical ? 'crit' : 'med') + '"></div><div class="txt"><div class="t">' + esc(d.title) + '</div><div class="d">' + esc(d.date) + '</div></div><span class="tag ' + (d.human.startsWith('TODAY') || d.human.startsWith('tomorrow') ? 'soon' : '') + '">' + esc(d.human) + '</span></div>').join('')
@@ -662,6 +668,8 @@ function renderTimers() {
       if (btnEl) btnEl.textContent = done ? '✅ Done' : (timerState[key].running ? '⏸ Pause' : (el > 0 ? '▶ Resume' : '▶ Start'));
       cardEl.classList.toggle('running', !!timerState[key].running);
       cardEl.classList.toggle('done', !!done);
+      const badge = document.getElementById('ov-' + key);
+      if (badge) badge.textContent = done ? '✅ Done' : ('⏱ ' + fmtClock(def.target - Math.min(el, def.target)) + ' left');
       if (el >= def.target && !cardEl.dataset.finished) { cardEl.dataset.finished = '1'; finishTimer(key); }
       if (el < def.target && cardEl.dataset.finished) delete cardEl.dataset.finished;
     } catch (err) {
