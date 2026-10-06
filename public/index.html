@@ -539,7 +539,6 @@ function init() {
   loadOverview();
   setInterval(renderTimers, 1000); renderTimers();
 }
-init();
 
 // ----- OVERVIEW -----
 function loadOverview() {
@@ -1032,6 +1031,8 @@ function saveSettings() {
   if (gemini) body.geminiKey = gemini;
   api('/api/settings', 'POST', body).then((r) => { document.getElementById('sGemini').value = ''; localStorage.setItem('geminiSet', r.geminiKeySet ? '1' : '0'); loadSettings(); toast('Saved' + (r.geminiKeySet ? ' — AI active' : '')); }).catch((e) => toast(e.message));
 }
+// Boot last: every top-level let/const above must be initialized before init touches them.
+init();
 </script>
 </body>
 </html>
