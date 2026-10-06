@@ -382,6 +382,19 @@ app.get('/api/profile', requireAuth, async (req, res) => {
   const profile = await getDoc('profile/main');
   res.json({ ok: true, profile: profile || PROFILE });
 });
+app.patch('/api/profile', requireAuth, async (req, res) => {
+  const allowed = ['name', 'headline', 'email', 'academicEmail', 'phone', 'location', 'github', 'portfolio', 'linkedin', 'education', 'researchInterests', 'currentResearch', 'skills', 'experience', 'achievements', 'leadership', 'languages', 'careerGoal', 'countryTargets', 'priorityOrder', 'criticalPath', 'operatingPrinciples'];
+  const patch = {};
+  allowed.forEach((k) => { if (req.body[k] !== undefined) patch[k] = req.body[k]; });
+  if (!Object.keys(patch).length) return res.status(400).json({ ok: false, error: 'nothing to update' });
+  const current = (await getDoc('profile/main')) || {};
+  await setDoc('profile/main', Object.assign({}, current, patch), false);
+  res.json({ ok: true, profile: Object.assign({}, current, patch) });
+});
+app.post('/api/profile/sync-file', requireAuth, async (req, res) => {
+  await setDoc('profile/main', PROFILE, false);
+  res.json({ ok: true, note: 'profile/main overwritten from api/lib/profile.js' });
+});
 
 // ---- goals ----
 app.get('/api/goals', requireAuth, async (req, res) => {

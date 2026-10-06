@@ -23,10 +23,14 @@ const PROFILE = {
   ],
   currentResearch: {
     title: 'Autonomous Mobile Robot Navigation via ROS2-Based SLAM and AI-Enhanced Decision-Making',
-    team: 'Team Lead, 3-member robotics research group at UAP',
+    team: 'Team Lead, Team Supersonic UAP (3-member robotics research group at UAP)',
     stack: 'ROS2, Nav2, SLAM Toolbox, Jetson Nano, LiDAR, Kinect RGB-D, Arduino Mega, Zenoh, Tailscale',
-    status: 'Hardware integration phase; manuscript in preparation targeting IEEE conference/journal',
-    paperDeadline: 'Primary: submit Paper #1 by September 2026 (target ICCAS/URAI/ROBIO)',
+    status: 'Two conference papers submitted and under review: ICECE 2026 and ICCIT 2026 (results pending). Project Ultron UV selected Top 38 Featured Innovation at BEAR Summit 2026.',
+    paperDeadline: 'Submitted: ICECE 2026 + ICCIT 2026 (awaiting results)',
+    submissions: [
+      { venue: 'ICECE 2026', status: 'submitted, results pending' },
+      { venue: 'ICCIT 2026', status: 'submitted, results pending' },
+    ],
   },
   skills: [
     'ROS2, Nav2, SLAM Toolbox, Zenoh, Gazebo, TF2, RViz2, micro-ROS',
@@ -51,14 +55,15 @@ const PROFILE = {
     },
   ],
   achievements: [
+    'Top 38 Featured Innovation (Ultron UV, Team Supersonic UAP) — BEAR Summit 2026; presented to the Honorable Prime Minister of Bangladesh, featured on national television',
     'Champion - IEEE WiE BD Summit 2024 (Robotics for Climate Change)',
     '5th Place - IEEE Region 10 Robotics Competition',
     '11th Place - 6th Kibo Robot Programming Challenge (JAXA-affiliated)',
+    'Two conference papers submitted: ICECE 2026 + ICCIT 2026 (results pending)',
   ],
   leadership: [
-    'Team Leader, Autonomous Robotics Research Group, UAP (2024-Present)',
-    'Membership Development Coordinator, IEEE Student Branch, UAP',
-    'Associate, Project Coordination Team, UAP EEE Project Club',
+    'Team Leader, Autonomous Robotics Research Group (Team Supersonic UAP), UAP (2024-Present)',
+    'Webmaster, IEEE UAP SB WIE Affinity Group (sub-branch of IEEE UAP Student Branch)',
     'IEEE Student Member',
   ],
   languages: ['English (Professional Working)', 'Bengali (Native/Bilingual)'],
@@ -75,7 +80,7 @@ const PROFILE = {
   ],
   criticalPath: [
     'IELTS Academic 7.0+ after BSc (post-Dec 2027)',
-    'Paper #1 submitted by September 2026 (hard deadline)',
+    'Papers submitted: ICECE 2026 + ICCIT 2026 (track results; add acceptances to SOP/CV immediately)',
     'GRE Aug/Sep 2026 if pursuing USA',
     'SOP full draft by October 2026',
     'CGPA recovery: 3.2-3.7/semester through graduation (strong upward trend story)',
