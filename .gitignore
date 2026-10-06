@@ -10,3 +10,5 @@ firebase-debug.*.log
 scripts/*.json
 scripts/*.pid
 scripts/*.txt
+.vercel
+.env*
