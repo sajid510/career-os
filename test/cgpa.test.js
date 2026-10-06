@@ -21,8 +21,8 @@ test('retake adds BOTH grade points and credits (F was outside divisor)', () => 
   assert.strictEqual(out.applied[0].kind, 'retake');
   assert.strictEqual(out.doc.completedCredits, 79);
   assert.ok(out.doc.backlogs[0].done && out.doc.backlogs[0].newGrade === 3.5);
-  // QP: 2.59*76 + 3.5*3 = 196.84 + 10.5 = 207.34 → /79 = 2.624
-  assert.strictEqual(out.after.cgpa, 2.624);
+  // QP: 2.59*76 + 3.5*3 = 196.84 + 10.5 = 207.34 → /79 = 2.625
+  assert.strictEqual(out.after.cgpa, 2.625);
   assert.ok(out.doc.notes.includes('Fall 2026'));
 });
 
