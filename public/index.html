@@ -401,7 +401,7 @@ footer{color:var(--mut);font-size:11.5px;text-align:center;padding:26px 0 14px}
     <div class="mis-view hidden" id="mis-cgpa">
       <div class="grid stat-grid" id="cgpaStats" style="margin-bottom:12px"></div>
       <div class="card">
-        <h3>📐 Backlog grade replacement (CGPA lever)</h3>
+        <h3 id="blHead">📐 Backlog grade replacement (CGPA lever)</h3>
         <div id="cgpaBacklogs"></div>
         <div style="margin-top:12px"><small id="cgpaNotes"></small></div>
       </div>
@@ -938,11 +938,13 @@ function loadCGPA() {
     const baseQP = (c.cgpa || 0) * (c.completedCredits || 0);
     const futureQP = (c.futureSems || []).reduce((s, f) => s + (f.gpa || 0) * f.credits, 0);
     const futureCr = (c.futureSems || []).reduce((s, f) => s + (f.credits || 0), 0);
-    const totalCredits = (c.completedCredits || 0) + futureCr;
-    const effective = totalCredits > 0 ? (baseQP + futureQP) / totalCredits : (c.cgpa || 0);
+    let bonusQP = 0, bonusCr = 0;
+    (c.backlogs || []).forEach((b) => { if (b.done && (parseFloat(b.newGrade) || 0) > 0) { bonusQP += parseFloat(b.newGrade) * b.credits; bonusCr += b.credits; } });
+    const totalCredits = (c.completedCredits || 0) + bonusCr + futureCr;
+    const effective = totalCredits > 0 ? (baseQP + bonusQP + futureQP) / totalCredits : (c.cgpa || 0);
     const pend = (c.backlogs || []).filter((b) => !b.done).reduce((s, b) => s + b.credits, 0);
     const simBase = totalCredits + pend;
-    const sim = simBase > 0 ? (baseQP + pend * 3.75 + futureQP) / simBase : (c.cgpa || 0);
+    const sim = simBase > 0 ? (baseQP + bonusQP + pend * 3.75 + futureQP) / simBase : (c.cgpa || 0);
     document.getElementById('cgpaStats').innerHTML = [
       ['Current CGPA', (c.cgpa || 0).toFixed(2), 'warn'],
       ['Credits', (c.completedCredits || 0) + '/' + (c.totalDegreeCredits || 0), 'ok'],
@@ -952,23 +954,40 @@ function loadCGPA() {
       ['Need avg on rest', o.required && o.required.value !== null ? o.required.value.toFixed(2) : '—', !o.required || o.required.verdict === 'reachable' || o.required.verdict === 'already-secured' ? 'ok' : 'crit'],
       ['GKS cutoff 2.64', (c.cgpa || 0) >= 2.64 ? 'QUALIFY' : 'below', (c.cgpa || 0) >= 2.64 ? 'ok' : 'crit'],
     ].map(([l, n, cls]) => '<div class="stat ' + cls + '"><div class="n">' + n + '</div><div class="l">' + l + '</div></div>').join('');
-    document.getElementById('cgpaBacklogs').innerHTML = (c.backlogs || []).map((b, idx) =>
-      '<div class="item"><input type="checkbox" ' + (b.done ? 'checked' : '') + ' onchange="toggleBacklog(' + idx + ',this.checked)" style="accent-color:var(--acc)">' +
-      '<div class="txt"><div class="t">' + esc(b.course) + '</div><div class="d">' + b.credits + ' credits · was 0.00' +
-      (b.done ? ' · new grade: <input type="number" step="0.01" min="0" max="4" value="' + (b.newGrade || 0) + '" onchange="setBacklogGrade(' + idx + ',this.value)" style="width:60px;padding:2px 4px">' : '') + '</div></div></div>').join('') || '<div class="empty">No backlogs</div>';
+    document.getElementById('cgpaBacklogs').innerHTML = (c.backlogs || []).map((b, idx) => {
+      const g = parseFloat(b.newGrade) || 0;
+      const status = (b.done && g > 0) ? '<span class="tag live">CLEARED</span>' : '<span class="tag">PENDING</span>';
+      // Lift preview: CGPA with this row cleared at grade g vs current totals.
+      const Tqp = baseQP + bonusQP + futureQP, Tcr = (c.completedCredits || 0) + bonusCr + futureCr;
+      const cur = Tcr > 0 ? Tqp / Tcr : 0;
+      let liftTxt;
+      if (b.done && g > 0) {
+        const woQ = Tqp - g * b.credits, woC = Tcr - b.credits;
+        const wo = woC > 0 ? woQ / woC : 0;
+        liftTxt = '✓ at ' + g.toFixed(2) + ' → +' + (cur - wo).toFixed(3);
+      } else {
+        const withQ = Tqp + 3.5 * b.credits, withC = Tcr + b.credits;
+        liftTxt = 'at 3.5 → +' + (withQ / withC - cur).toFixed(3);
+      }
+      return '<div class="item"><div class="txt"><div class="t" style="font-size:15px;font-weight:700">' + esc(b.course) + '</div>' +
+        '<div class="d">' + b.credits + ' credits · was F (0.00) · ' + esc(liftTxt) + '</div></div>' +
+        '<div style="display:flex;flex-direction:column;gap:4px;align-items:flex-end">' + status +
+        '<input type="number" step="0.01" min="0" max="4" placeholder="grade" value="' + (g > 0 ? g : '') + '" onchange="setBacklogGrade(' + idx + ',this.value)" title="Enter retake grade — auto-saves" style="width:76px;padding:5px 8px"></div></div>';
+    }).join('') || '<div class="empty">No backlogs</div>';
     document.getElementById('cgpaNotes').textContent = c.notes || '';
+    const pendCount = (c.backlogs || []).filter((b) => !b.done).length;
+    document.getElementById('blHead').textContent = '📐 Backlog grade replacement (' + pendCount + ' pending · ' + pend + 'cr) — enter retake grades as results arrive';
   }).catch((e) => toast(e.message));
-}
-function toggleBacklog(idx, done) {
-  if (!CGPA_DATA.backlogs[idx]) return;
-  CGPA_DATA.backlogs[idx].done = done;
-  if (!done) CGPA_DATA.backlogs[idx].newGrade = 0;
-  saveCGPA();
 }
 function setBacklogGrade(idx, grade) {
   if (!CGPA_DATA.backlogs[idx]) return;
-  CGPA_DATA.backlogs[idx].newGrade = parseFloat(grade) || 0;
+  let g = parseFloat(grade) || 0;
+  if (g < 0) g = 0;
+  if (g > 4) g = 4;
+  CGPA_DATA.backlogs[idx].newGrade = Math.round(g * 100) / 100;
+  CGPA_DATA.backlogs[idx].done = g > 0;
   saveCGPA();
+  toast(g > 0 ? 'Retake grade saved ✅' : 'Marked pending');
 }
 function saveCGPA() { api('/api/cgpa', 'POST', CGPA_DATA).then(loadCGPA).catch((e) => toast(e.message)); }
 function importCGPA() {
