@@ -5,15 +5,15 @@ const fs = require('fs');
 const {
   db, admin, nowIso, makeId, getDoc, setDoc, addDoc, listDocs, deleteDoc,
   daysUntil, inDays, humanDate, toLocalDateStr, addDaysLocal, localNow, dhakaParts, DAY_SHORT,
-} = require('./lib/util');
-const { getSettings, saveSettings, getHubToken, setHubToken } = require('./lib/config');
-const { PROFILE } = require('./lib/profile');
-const { DEADLINES, PHASES, MILESTONES, TASKS, GOALS } = require('./lib/seed');
-const { callGemini, buildSystemPrompt, executeTool, TOOL_DEFS, textFrom } = require('./lib/gemini');
-const { syncAll, syncCareerIo, syncTeamDashboard, ingestConnectorData } = require('./lib/connectors');
-const { ensureClassReminders, ensureDeadlineReminders } = require('./lib/reminders');
-const { ensureDailyRoutine } = require('./lib/routine');
-const { buildAuthUrl, syncClassroom, getStatus: getClassroomStatus, HUB_BASE, CALLBACK_PATH } = require('./lib/classroom');
+} = require('../lib/util');
+const { getSettings, saveSettings, getHubToken, setHubToken } = require('../lib/config');
+const { PROFILE } = require('../lib/profile');
+const { DEADLINES, PHASES, MILESTONES, TASKS, GOALS } = require('../lib/seed');
+const { callGemini, buildSystemPrompt, executeTool, TOOL_DEFS, textFrom } = require('../lib/gemini');
+const { syncAll, syncCareerIo, syncTeamDashboard, ingestConnectorData } = require('../lib/connectors');
+const { ensureClassReminders, ensureDeadlineReminders } = require('../lib/reminders');
+const { ensureDailyRoutine } = require('../lib/routine');
+const { buildAuthUrl, syncClassroom, getStatus: getClassroomStatus, HUB_BASE, CALLBACK_PATH } = require('../lib/classroom');
 const {
   logTaskOutcome,
   logFeedback,
@@ -22,9 +22,9 @@ const {
   forgetFact,
   upsertRefinedFacts,
   getRelevantFacts,
-} = require('./lib/learning');
-const { PHASES: RESTART_PHASES, DEADLINES: RESTART_DEADLINES, MILESTONES: RESTART_MILESTONES, TASKS: RESTART_TASKS, GOALS: RESTART_GOALS, SUMMARY: RESTART_SUMMARY } = require('./lib/plan');
-const { SCHOLARSHIPS, UNIVERSITIES, PROFESSORS, CGPA, NOTES } = require('./lib/mission');
+} = require('../lib/learning');
+const { PHASES: RESTART_PHASES, DEADLINES: RESTART_DEADLINES, MILESTONES: RESTART_MILESTONES, TASKS: RESTART_TASKS, GOALS: RESTART_GOALS, SUMMARY: RESTART_SUMMARY } = require('../lib/plan');
+const { SCHOLARSHIPS, UNIVERSITIES, PROFESSORS, CGPA, NOTES } = require('../lib/mission');
 
 const app = express();
 app.use(cors({ origin: true }));
@@ -394,7 +394,7 @@ app.patch('/api/profile', requireAuth, async (req, res) => {
 });
 app.post('/api/profile/sync-file', requireAuth, async (req, res) => {
   await setDoc('profile/main', PROFILE, false);
-  res.json({ ok: true, note: 'profile/main overwritten from api/lib/profile.js' });
+  res.json({ ok: true, note: 'profile/main overwritten from lib/profile.js' });
 });
 
 // ---- goals ----

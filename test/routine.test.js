@@ -7,8 +7,8 @@ const { makeDb, install } = require('./helpers/mock-firebase');
 const db = makeDb();
 install(db);
 
-const { DAILY_ROUTINE, ensureDailyRoutine } = require('../api/lib/routine');
-const { listDocs, toLocalDateStr } = require('../api/lib/util');
+const { DAILY_ROUTINE, ensureDailyRoutine } = require('../lib/routine');
+const { listDocs, toLocalDateStr } = require('../lib/util');
 
 test('routine defines 2h study + 1h project blocks', () => {
   assert.strictEqual(DAILY_ROUTINE.length, 2);

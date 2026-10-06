@@ -2,7 +2,7 @@
 
 const { test } = require('node:test');
 const assert = require('node:assert');
-const { PROFILE } = require('../api/lib/profile');
+const { PROFILE } = require('../lib/profile');
 
 test('profile reflects post-BSc status: no pre-BSc IELTS, current roles and submissions', () => {
   const strings = [];

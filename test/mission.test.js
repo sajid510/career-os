@@ -6,7 +6,7 @@ const { makeDb, install } = require('./helpers/mock-firebase');
 const db = makeDb();
 install(db);
 
-const m = require('../api/lib/mission');
+const m = require('../lib/mission');
 
 test('mission trackers have the expected volume', () => {
   assert.ok(m.SCHOLARSHIPS.length >= 10);

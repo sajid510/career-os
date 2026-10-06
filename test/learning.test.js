@@ -17,8 +17,8 @@ const {
   upsertRefinedFacts,
   getRelevantFacts,
   scoreFacts,
-} = require('../api/lib/learning');
-const { listDocs, getDoc } = require('../api/lib/util');
+} = require('../lib/learning');
+const { listDocs, getDoc } = require('../lib/util');
 
 test('extractTags lowercases, dedupes and drops stopwords', () => {
   const tags = extractTags('Morning ROS2 SLAM morning the and');

@@ -7,7 +7,7 @@ const { makeDb, install } = require('./helpers/mock-firebase');
 const db = makeDb();
 install(db);
 
-const u = require('../api/lib/util');
+const u = require('../lib/util');
 
 test('dhakaParts converts a UTC timestamp to Dhaka wall-clock components', () => {
   const p = u.dhakaParts(Date.parse('2026-07-31T19:00:00Z')); // = 2026-08-01 01:00 Dhaka (Sat)

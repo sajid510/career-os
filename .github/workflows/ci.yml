@@ -17,7 +17,7 @@ jobs:
         run: npm ci
       - name: Syntax check all backend files
         run: |
-          for f in $(find api -name '*.js'); do
+          for f in $(find api lib -name '*.js'); do
             node --check "$f" || exit 1
           done
           echo "syntax OK"

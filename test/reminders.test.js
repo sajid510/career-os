@@ -7,7 +7,7 @@ const { makeDb, install } = require('./helpers/mock-firebase');
 const db = makeDb();
 install(db);
 
-const { ensureClassReminders, ensureDeadlineReminders } = require('../api/lib/reminders');
+const { ensureClassReminders, ensureDeadlineReminders } = require('../lib/reminders');
 
 async function reminders() {
   const snap = await db.collection('reminders').get();

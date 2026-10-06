@@ -6,7 +6,7 @@ const { makeDb, install } = require('./helpers/mock-firebase');
 const db = makeDb();
 install(db);
 
-const p = require('../api/lib/plan');
+const p = require('../lib/plan');
 
 test('plan has the expected restart-mission shape', () => {
   assert.ok(p.TASKS.length >= 100, 'at least 100 tasks');

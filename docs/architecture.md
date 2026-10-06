@@ -24,13 +24,13 @@ Career OS is a **server-side application** with thin clients. All business logic
 | Component | Location | Responsibility |
 | --- | --- | --- |
 | **API server** | `api/index.js` | Express app, all REST endpoints, cron endpoints, auth middleware |
-| **DB layer** | `api/lib/util.js` | Thin Firestore helpers (`getDoc/setDoc/addDoc/listDocs/queryDocs/deleteDoc`) + Dhaka timezone math |
-| **Settings** | `api/lib/config.js` | Merged settings document (`settings/hub`) with env fallbacks and default values |
-| **Agent** | `api/lib/gemini.js` | Gemini client, tool definitions, tool executor, dynamic system prompt |
-| **Reminders** | `api/lib/reminders.js` | Generators for class (15-min) and deadline (24-h) reminders (idempotent) |
-| **Classroom** | `api/lib/classroom.js` | OAuth token management + courses/coursework/announcements sync |
-| **Connectors** | `api/lib/connectors.js` | career-io webhook, robot-oda RTDB, Classroom, CI ingest |
-| **Plan & mission** | `api/lib/plan.js`, `api/lib/mission.js` | Seed data for the restart plan and the trackers |
+| **DB layer** | `lib/util.js` | Thin Firestore helpers (`getDoc/setDoc/addDoc/listDocs/queryDocs/deleteDoc`) + Dhaka timezone math |
+| **Settings** | `lib/config.js` | Merged settings document (`settings/hub`) with env fallbacks and default values |
+| **Agent** | `lib/gemini.js` | Gemini client, tool definitions, tool executor, dynamic system prompt |
+| **Reminders** | `lib/reminders.js` | Generators for class (15-min) and deadline (24-h) reminders (idempotent) |
+| **Classroom** | `lib/classroom.js` | OAuth token management + courses/coursework/announcements sync |
+| **Connectors** | `lib/connectors.js` | career-io webhook, robot-oda RTDB, Classroom, CI ingest |
+| **Plan & mission** | `lib/plan.js`, `lib/mission.js` | Seed data for the restart plan and the trackers |
 
 ---
 
@@ -79,7 +79,7 @@ All collections live in the `career-os-hub` Firestore project. `firestore.rules`
 The app must deliver reminders even when offline, so the hub **pre-generates** reminders and the app schedules them as exact alarms.
 
 **Class reminders — 15 minutes before**
-1. `ensureClassReminders()` (`api/lib/reminders.js`) runs on every cron tick (and after schedule edits).
+1. `ensureClassReminders()` (`lib/reminders.js`) runs on every cron tick (and after schedule edits).
 2. For each enabled `schedule` entry it computes all occurrences in the next **7 days** (Dhaka time) and creates a `reminders` doc with `dueAt = class start`, `leadMinutes = 15`, `source = schedule`, deduplicated by `scheduleKey`.
 3. The Android app (`SyncWorker`, every 15 min) fetches `/api/reminders` and schedules each future reminder as an `AlarmManager` alarm at `dueAt - leadMinutes`.
 
@@ -100,7 +100,7 @@ The app must deliver reminders even when offline, so the hub **pre-generates** r
 `POST /api/chat` runs a **tool-calling loop** (up to 8 rounds):
 
 1. `buildSystemPrompt()` assembles a dynamic prompt: profile, active phase, upcoming deadlines, open tasks, today's classes, upcoming tests, scholarship deadlines, professor outreach status, and **learned facts** about the user.
-2. The model may call any of the registered **tools** (`TOOL_DEFS` in `api/lib/gemini.js`): task CRUD, deadlines, reminders, class schedule, tests, goals, notifications, learning stats, classroom status, system status, etc.
+2. The model may call any of the registered **tools** (`TOOL_DEFS` in `lib/gemini.js`): task CRUD, deadlines, reminders, class schedule, tests, goals, notifications, learning stats, classroom status, system status, etc.
 3. Tool results are fed back; the loop continues until the model emits a plain-text answer.
 
 The agent's "self-learning" comes from:

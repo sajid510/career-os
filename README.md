@@ -83,7 +83,7 @@ Key design decisions:
 - **Single token auth** shared by dashboard (localStorage), Android (SharedPreferences) and GitHub Actions (secret `HUB_TOKEN`).
 - **Self-learning loop**: task completions / feedback / corrections → `learning_events` → monthly Gemini distillation → `learning_facts` → injected into the agent prompt.
 - **Offline reminders**: the hub generates reminders; the app polls every 15 min and schedules exact `AlarmManager` alarms (re-armed on boot).
-- **Timezone**: everything is computed in **Asia/Dhaka (UTC+6)** timezone-safe helpers (`api/lib/util.js`).
+- **Timezone**: everything is computed in **Asia/Dhaka (UTC+6)** timezone-safe helpers (`lib/util.js`).
 
 See **[docs/architecture.md](docs/architecture.md)** for a deeper walkthrough.
 
@@ -176,7 +176,7 @@ See **[docs/deployment.md](docs/deployment.md)** for full setup: Firebase projec
 - [docs/architecture.md](docs/architecture.md) — architecture, data model, flows
 - [docs/deployment.md](docs/deployment.md) — deployment & credentials
 - [android/README.md](android/README.md) — Android app build & install
-- [Mission plan](api/lib/plan.js) — the Aug-2026 restart plan (115 tasks, 20 deadlines)
+- [Mission plan](lib/plan.js) — the Aug-2026 restart plan (115 tasks, 20 deadlines)
 
 ---
 
