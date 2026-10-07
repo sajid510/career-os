@@ -210,38 +210,16 @@ footer{color:var(--mut);font-size:11.5px;text-align:center;padding:26px 0 14px}
   <!-- TASKS -->
   <section id="tab-tasks" class="hidden">
     <div class="card" style="margin-bottom:12px">
-      <h3>⏱️ Focus timers</h3>
-      <p style="font-size:12.5px;color:var(--mut);margin-bottom:10px">Start a timer when you begin. Reaching the target auto-completes today's routine task. Timers survive reloads; only one runs at a time.</p>
-      <div class="grid two">
-        <div class="tcard" id="tm-study">
-          <div class="ttitle">📚 Academic study</div>
-          <div class="tsub">Target 2h 00m / day</div>
-          <div class="ttime" id="tm-study-time">2:00:00</div>
-          <div class="pbar"><div class="pfill" id="tm-study-fill"></div></div>
-          <div class="trow">
-            <button class="btn" id="tm-study-btn" onclick="toggleTimer('study')">▶ Start</button>
-            <button class="btn" onclick="resetTimer('study')">↺ Reset</button>
-          </div>
-          <div class="tlink" id="tm-study-link">Linking today's task…</div>
-        </div>
-        <div class="tcard" id="tm-project">
-          <div class="ttitle">🛠️ Project / technical work</div>
-          <div class="tsub">Target 1h 00m / day</div>
-          <div class="ttime" id="tm-project-time">1:00:00</div>
-          <div class="pbar"><div class="pfill" id="tm-project-fill"></div></div>
-          <div class="trow">
-            <button class="btn" id="tm-project-btn" onclick="toggleTimer('project')">▶ Start</button>
-            <button class="btn" onclick="resetTimer('project')">↺ Reset</button>
-          </div>
-          <div class="tlink" id="tm-project-link">Linking today's task…</div>
-        </div>
-      </div>
-    </div>
-    <div class="card" style="margin-bottom:12px">
       <h3>➕ New task</h3>
       <div class="row">
         <input class="grow" id="tTitle" placeholder="Task title">
         <input id="tDue" type="date">
+        <select id="tWhen" onchange="setDueHorizon(this.value)" title="Quick due date">
+          <option value="">When…</option>
+          <option value="0">📅 Today</option>
+          <option value="7">🗓️ This week</option>
+          <option value="30">📆 This month</option>
+        </select>
         <select id="tCat">
           <option value="general">General</option><option value="academic">Academic</option><option value="research">Research</option>
           <option value="outreach">Outreach</option><option value="scholarship">Scholarship</option><option value="documents">Documents</option>
@@ -569,7 +547,15 @@ function loadOverview() {
       ? o.dueTodayTasks.map((t) => {
         const routineKey = t.source === 'daily-routine' ? (t.title.includes('Academic study') ? 'study' : (t.title.includes('Project / technical') ? 'project' : '')) : '';
         if (routineKey && (!linkedTask[routineKey] || !linkedTask[routineKey].done)) linkedTask[routineKey] = { id: t.id, done: false };
-        return '<div class="item"><div class="dot ' + (t.priority === 'critical' ? 'crit' : 'high') + '"></div><div class="txt"><div class="t">' + esc(t.title) + '</div><div class="d">' + esc(t.category) + (routineKey ? ' <span class="tag live" id="ov-' + routineKey + '">⏱ ' + TIMER_DEFS[routineKey].targetLabel + ' left</span>' : '') + '</div></div></div>';
+        const timerUI = routineKey
+          ? '<div class="trow" style="margin-top:6px"><span class="ttime" id="tm-' + routineKey + '-time" style="font-size:19px">…</span>' +
+            '<span class="tag live" id="ov-' + routineKey + '">⏱ ' + TIMER_DEFS[routineKey].targetLabel + ' left</span>' +
+            '<button class="btn" id="tm-' + routineKey + '-btn" onclick="toggleTimer(\'' + routineKey + '\')">▶ Start</button>' +
+            '<button class="btn" onclick="resetTimer(\'' + routineKey + '\')">↺</button></div>' +
+            '<div class="pbar" style="margin:6px 0 2px"><div class="pfill" id="tm-' + routineKey + '-fill"></div></div>' +
+            '<div class="tlink" id="tm-' + routineKey + '-link"></div><div id="tm-' + routineKey + '" style="display:none"></div>'
+          : '';
+        return '<div class="item"><div class="dot ' + (t.priority === 'critical' ? 'crit' : 'high') + '"></div><div class="txt"><div class="t">' + esc(t.title) + '</div><div class="d">' + esc(t.category) + '</div>' + timerUI + '</div></div>';
       }).join('')
       : '<div class="empty">Nothing due today ✅</div>';
     renderTimers();
@@ -591,13 +577,33 @@ function ic(t) { return { deadline: '⏰', task: '✅', connector: '🔌', agent
 
 function syncSystems() { toast('Syncing connectors...'); api('/api/systems/sync', 'POST', { scope: 'light' }).then((r) => { toast('Synced'); loadOverview(); }).catch((e) => toast(e.message)); }
 
-// ----- TASKS -----
+// ----- TASKS (Today / This week / This month buckets) -----
+function localDay(offset) { const d = new Date(Date.now() + (offset || 0) * 86400000); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); }
+function setDueHorizon(v) { if (v === '' || v === null) return; document.getElementById('tDue').value = localDay(parseInt(v, 10) || 0); }
+function taskRow(t) {
+  return '<div class="tbl-row"><button onclick="setTask(\'' + t.id + '\',\'done\')" title="Complete">✅</button><div class="t" style="' + (t.status === 'done' ? 'text-decoration:line-through;color:var(--mut)' : '') + '">' + esc(t.title) + ' <span class="tag">' + esc(t.category) + '</span>' + (t.dueAt ? ' <span class="tag ' + (t.human === 'TODAY' ? 'today' : (t.human || '').startsWith('in 0') || (t.human || '').startsWith('in 1') ? 'soon' : '') + '">' + esc(t.human) + '</span>' : '') + '</div><select onchange="setTask(\'' + t.id + '\',this.value)"><option value="open" ' + (t.status === 'open' ? 'selected' : '') + '>Open</option><option value="in_progress" ' + (t.status === 'in_progress' ? 'selected' : '') + '>In progress</option><option value="blocked" ' + (t.status === 'blocked' ? 'selected' : '') + '>Blocked</option><option value="done" ' + (t.status === 'done' ? 'selected' : '') + '>Done</option></select><button onclick="del(\'/api/tasks/\'+\'' + t.id + '\', loadTasks)" title="Delete">🗑️</button></div>';
+}
+function taskGroup(title, items) {
+  return '<h3 style="margin:12px 0 6px">' + title + ' (' + items.length + ')</h3>' +
+    (items.length ? items.map(taskRow).join('') : '<div class="empty">—</div>');
+}
 function loadTasks() {
   api('/api/tasks').then((o) => {
     const tasks = o.tasks || [];
-    document.getElementById('tasksList').innerHTML = tasks.length
-      ? tasks.map((t) => '<div class="tbl-row"><button onclick="setTask(\'' + t.id + '\',\'done\')" title="Complete">✅</button><div class="t" style="' + (t.status === 'done' ? 'text-decoration:line-through;color:var(--mut)' : '') + '">' + esc(t.title) + ' <span class="tag">' + esc(t.category) + '</span>' + (t.dueAt ? ' <span class="tag ' + (t.human === 'TODAY' ? 'today' : t.human.startsWith('in 0') || t.human.startsWith('in 1') ? 'soon' : '') + '">' + esc(t.human) + '</span>' : '') + '</div><select onchange="setTask(\'' + t.id + '\',this.value)"><option value="open" ' + (t.status === 'open' ? 'selected' : '') + '>Open</option><option value="in_progress" ' + (t.status === 'in_progress' ? 'selected' : '') + '>In progress</option><option value="blocked" ' + (t.status === 'blocked' ? 'selected' : '') + '>Blocked</option><option value="done" ' + (t.status === 'done' ? 'selected' : '') + '>Done</option></select><button onclick="del(\'/api/tasks/\'+\'' + t.id + '\', loadTasks)" title="Delete">🗑️</button></div>').join('')
-      : '<div class="empty">No tasks yet</div>';
+    const t0 = localDay(0), t7 = localDay(7), t30 = localDay(30);
+    const day = (x) => (x.dueAt || '').slice(0, 10);
+    const open = tasks.filter((x) => x.status !== 'done');
+    const done = tasks.filter((x) => x.status === 'done');
+    const gToday = open.filter((x) => day(x) && day(x) <= t0);
+    const gWeek = open.filter((x) => day(x) > t0 && day(x) <= t7);
+    const gMonth = open.filter((x) => day(x) > t7 && day(x) <= t30);
+    const gLater = open.filter((x) => !day(x) || day(x) > t30);
+    document.getElementById('tasksList').innerHTML =
+      taskGroup('📅 Today & overdue', gToday) +
+      taskGroup('🗓️ This week', gWeek) +
+      taskGroup('📆 This month', gMonth) +
+      (gLater.length ? '<details style="margin-top:10px"><summary style="cursor:pointer;font-size:13px;color:var(--mut)">Later / no date (' + gLater.length + ')</summary>' + gLater.map(taskRow).join('') + '</details>' : '') +
+      (done.length ? '<details style="margin-top:10px"><summary style="cursor:pointer;font-size:13px;color:var(--mut)">Completed (' + done.length + ')</summary>' + done.map(taskRow).join('') + '</details>' : '');
     linkFocusTimers(tasks);
   }).catch((e) => toast('Tasks: ' + e.message));
 }
@@ -629,7 +635,7 @@ function toggleTimer(key) {
   if (timerState.date !== timerToday()) { timerState = freshTimerState(); linkedTask = { study: null, project: null }; }
   const link = linkedTask[key];
   if (link && link.done) return toast('Already completed today ✅');
-  if (!link) { toast("Generating today's routine…"); api('/api/routine/today', 'POST').then(() => { loadTasks(); toast('Ready — press Start'); }).catch((e) => toast(e.message)); return; }
+  if (!link) { toast("Generating today's routine…"); api('/api/routine/today', 'POST').then(() => { loadOverview(); toast('Ready — press Start'); }).catch((e) => toast(e.message)); return; }
   const s = timerState[key];
   if (s.running) { s.elapsed = elapsedOf(key); s.running = false; s.since = 0; }
   else {
@@ -645,7 +651,7 @@ function linkFocusTimers(tasks) {
   for (const key of Object.keys(TIMER_DEFS)) {
     const t = (tasks || []).find((x) => x.source === 'daily-routine' && x.title && x.title.includes(TIMER_DEFS[key].match));
     const line = document.getElementById('tm-' + key + '-link');
-    if (!t) { linkedTask[key] = null; if (line) line.innerHTML = 'Today\'s routine not generated yet. <button class="btn" onclick="api(\'/api/routine/today\',\'POST\').then(loadTasks).catch((e)=>toast(e.message))">Generate</button>'; continue; }
+    if (!t) { linkedTask[key] = null; if (line) line.innerHTML = 'Today\'s routine not generated yet. <button class="btn" onclick="api(\'/api/routine/today\',\'POST\').then(loadOverview).catch((e)=>toast(e.message))">Generate</button>'; continue; }
     const done = t.status === 'done';
     linkedTask[key] = { id: t.id, done };
     if (done && timerState[key].running) { timerState[key].running = false; timerState[key].elapsed = TIMER_DEFS[key].target; saveTimers(); }
@@ -659,7 +665,7 @@ function finishTimer(key) {
   beep();
   if (!link || link.done) return toast('Target reached! 🎉');
   api('/api/tasks/' + link.id + '/complete', 'POST', { outcome: 'Tracked ' + fmtDur(TIMER_DEFS[key].target) + ' via focus timer' })
-    .then(() => { toast('Target reached — task auto-completed ✅'); loadTasks(); })
+    .then(() => { toast('Target reached — task auto-completed ✅'); try { loadOverview(); } catch (e) {} try { loadTasks(); } catch (e) {} })
     .catch((e) => toast('Timer done, but task update failed: ' + e.message));
 }
 function renderTimers() {
