@@ -1,12 +1,10 @@
 name: scheduler
 on:
-  # TEMPORARILY PAUSED during Firestore quota outage (2026-10-07): cron burn
-  # delays recovery. Restore the schedule block below after Blaze upgrade.
-  # schedule:
-  #   - cron: '*/30 * * * *'
-  #   - cron: '0 1 * * *'
-  #   - cron: '0 3 * * 0'
-  #   - cron: '0 4 1 * *'
+  schedule:
+    - cron: '*/30 * * * *'
+    - cron: '0 1 * * *'
+    - cron: '0 3 * * 0'
+    - cron: '0 4 1 * *'
   workflow_dispatch:
     inputs:
       target:
