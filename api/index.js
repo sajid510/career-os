@@ -1063,6 +1063,14 @@ app.post('/api/cron/daily', requireAuth, async (req, res) => {
     const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
     const countdowns = overview.deadlines.filter((d) => d.dueAt && daysUntil(d.dueAt) >= 0 && daysUntil(d.dueAt) <= 90).sort((a, b) => a.dueAt.localeCompare(b.dueAt)).slice(0, 8);
     let brief = 'Good morning, Sadnan. ' + todayDate.getDate() + ' ' + monthNames[todayDate.getMonth()] + ' ' + todayDate.getFullYear() + '.';
+    try {
+      const { describeRhythm } = require('../lib/routine');
+      const rh = await describeRhythm();
+      const fmtR = (v) => (v === 'full' ? 'full-day focus' : (v > 0 ? v + 'h' : 'rest'));
+      brief += rh.mode === 'override'
+        ? ' Rhythm override active: ' + rh.name + ' until ' + rh.until + ' (academic ' + fmtR(rh.academic) + ', technical ' + fmtR(rh.technical) + ').'
+        : ' Standard weekly rhythm today.';
+    } catch (e) {}
     if (due.length) brief += ' You have ' + due.length + ' task' + (due.length > 1 ? 's' : '') + ' due today: ' + due.map((t) => t.title).join(', ') + '.';
     else brief += ' No tasks due today - use the time to pull ahead.';
     const schedule = await listDocs('schedule');

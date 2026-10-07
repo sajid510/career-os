@@ -7,7 +7,7 @@ const { makeDb, install } = require('./helpers/mock-firebase');
 const db = makeDb();
 install(db);
 
-const { ROUTINE_BY_DOW, routineForDow, ensureDailyRoutine } = require('../lib/routine');
+const { ROUTINE_BY_DOW, routineForDow, ensureDailyRoutine, getActiveRhythm, entriesFromConfig, describeRhythm } = require('../lib/routine');
 const { listDocs, toLocalDateStr, dhakaParts } = require('../lib/util');
 
 test('weekday table matches the agreed schedule', () => {
@@ -56,4 +56,30 @@ test('manual same-title tasks do not block routine generation', async () => {
   const dow = dhakaParts(Date.now()).dow;
   const res = await ensureDailyRoutine();
   assert.strictEqual(res.created, routineForDow(dow).length);
+});
+
+test('rhythm override replaces the weekday table (prep-leave shape)', async () => {
+  db._reset();
+  const today = toLocalDateStr(new Date().toISOString());
+  await db.collection('rhythms').add({ name: 'Prep Leave', startDate: today, endDate: today, academic: 'full', technical: 0, status: 'active', createdAt: '2026-10-07T00:00:00.000Z' });
+  const hit = await getActiveRhythm(today);
+  assert.strictEqual(hit.name, 'Prep Leave');
+  const entries = entriesFromConfig({ academic: hit.academic, technical: hit.technical }, hit.name);
+  assert.strictEqual(entries.length, 1);
+  assert.ok(entries[0].title.includes('full day'));
+  assert.strictEqual(entries[0].targetSeconds, 0);
+  const res = await ensureDailyRoutine();
+  assert.strictEqual(res.rhythm, 'Prep Leave');
+  assert.strictEqual(res.created, 1);
+  const tasks = await listDocs('tasks');
+  assert.strictEqual(tasks[0].targetSeconds, 0);
+});
+
+test('expired overrides are ignored, describeRhythm falls back to default', async () => {
+  db._reset();
+  await db.collection('rhythms').add({ name: 'Old', startDate: '2020-01-01', endDate: '2020-01-02', academic: 0, technical: 0, status: 'active', createdAt: 'x' });
+  const today = toLocalDateStr(new Date().toISOString());
+  assert.strictEqual(await getActiveRhythm(today), null);
+  const desc = await describeRhythm();
+  assert.strictEqual(desc.mode, 'default');
 });

@@ -54,7 +54,7 @@ test('add_note creates notebook, search_notes ranks keyword hits', async () => {
 
 test('update_cgpa and update_profile patch narrowly', async () => {
   db._reset();
-  await setDoc('mission/cgpa', { cgpa: 2.61, backlogs: [] }, false);
+  await setDoc('mission/cgpa', { cgpa: 2.59, backlogs: [] }, false);
   assert.ok((await executeTool('update_cgpa', { notes: 'agent note' })).ok);
   assert.ok((await executeTool('update_cgpa', { backlogs: 'not json' })).error);
   assert.ok((await executeTool('update_profile', { headline: 'New headline' })).ok);

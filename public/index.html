@@ -632,9 +632,10 @@ function elapsedOf(key) { const s = timerState[key]; let e = s.elapsed || 0; if 
 function fmtClock(sec) { sec = Math.max(0, sec); const h = Math.floor(sec / 3600), m = Math.floor((sec % 3600) / 60), s = sec % 60; return h + ':' + String(m).padStart(2, '0') + ':' + String(s).padStart(2, '0'); }
 function fmtDur(sec) { const h = Math.floor(sec / 3600), m = Math.floor((sec % 3600) / 60); return h + 'h ' + String(m).padStart(2, '0') + 'm'; }
 // Per-day target comes from the linked routine task; falls back to the default.
+// targetSeconds 0 = open-ended full-day focus (counts up, manual completion).
 function targetOf(key) {
   const link = linkedTask[key];
-  if (link && link.targetSeconds > 0) return link.targetSeconds;
+  if (link && typeof link.targetSeconds === 'number') return link.targetSeconds;
   return TIMER_DEFS[key].target;
 }
 function toggleTimer(key) {
@@ -646,7 +647,8 @@ function toggleTimer(key) {
   if (s.running) { s.elapsed = elapsedOf(key); s.running = false; s.since = 0; }
   else {
     for (const k of Object.keys(TIMER_DEFS)) { if (k !== key && timerState[k].running) { timerState[k].elapsed = elapsedOf(k); timerState[k].running = false; timerState[k].since = 0; } }
-    if (elapsedOf(key) >= targetOf(key)) s.elapsed = 0;
+    const tg = targetOf(key);
+    if (tg > 0 && elapsedOf(key) >= tg) s.elapsed = 0;
     s.running = true; s.since = Date.now();
   }
   saveTimers(); renderTimers();
@@ -687,16 +689,17 @@ function renderTimers() {
       const cardEl = document.getElementById('tm-' + key);
       if (!timeEl || !cardEl) continue;
       const link = linkedTask[key];
-      const done = (link && link.done) || el >= target;
-      timeEl.textContent = fmtClock(target - Math.min(el, target));
-      if (fillEl) fillEl.style.width = Math.min(100, (el / target) * 100) + '%';
+      const open = target === 0;
+      const done = (link && link.done) || (!open && el >= target);
+      timeEl.textContent = open ? fmtClock(el) + ' ↑' : fmtClock(target - Math.min(el, target));
+      if (fillEl) { fillEl.style.width = open ? '100%' : (Math.min(100, (el / target) * 100) + '%'); }
       if (btnEl) btnEl.textContent = done ? '✅ Done' : (timerState[key].running ? '⏸ Pause' : (el > 0 ? '▶ Resume' : '▶ Start'));
       cardEl.classList.toggle('running', !!timerState[key].running);
       cardEl.classList.toggle('done', !!done);
       const badge = document.getElementById('ov-' + key);
-      if (badge) badge.textContent = done ? '✅ Done' : ('⏱ ' + fmtClock(target - Math.min(el, target)) + ' left');
-      if (el >= target && !cardEl.dataset.finished) { cardEl.dataset.finished = '1'; finishTimer(key); }
-      if (el < target && cardEl.dataset.finished) delete cardEl.dataset.finished;
+      if (badge) badge.textContent = done ? '✅ Done' : (open ? ('⏱ ' + fmtClock(el) + ' so far') : ('⏱ ' + fmtClock(target - Math.min(el, target)) + ' left'));
+      if (!open && el >= target && !cardEl.dataset.finished) { cardEl.dataset.finished = '1'; finishTimer(key); }
+      if ((open || el < target) && cardEl.dataset.finished) delete cardEl.dataset.finished;
     } catch (err) {
       const line = document.getElementById('tm-' + key + '-link');
       if (line) line.textContent = '⚠️ Timer error: ' + (err && err.message ? err.message : err);
