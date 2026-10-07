@@ -106,6 +106,20 @@ test('detectSlips notifies once per day only when slipping', async () => {
   assert.strictEqual((await detectSlips()).reason, 'already-sent-today');
 });
 
+test('rhythm tools: set validates, list shows, delete removes', async () => {
+  db._reset();
+  const ok = await executeTool('set_rhythm_override', { name: 'Prep', startDate: '2026-11-05', endDate: '2026-11-14', academic: 'full', technical: '0', note: 'x' });
+  assert.ok(ok.ok && ok.rhythm.id);
+  assert.ok((await executeTool('set_rhythm_override', { name: 'Bad', startDate: 'Nov 5', endDate: '2026-11-14', academic: 2, technical: 1 })).error);
+  assert.ok((await executeTool('set_rhythm_override', { name: 'Back', startDate: '2026-11-14', endDate: '2026-11-05', academic: 2, technical: 1 })).error);
+  assert.ok((await executeTool('set_rhythm_override', { name: 'Wild', startDate: '2026-11-05', endDate: '2026-11-14', academic: 99, technical: 1 })).error);
+  const list = await executeTool('list_rhythms', {});
+  assert.strictEqual(list.rhythms.length, 1);
+  assert.strictEqual(list.rhythms[0].academic, 'full');
+  assert.ok((await executeTool('delete_rhythm', { rhythmId: ok.rhythm.id })).ok);
+  assert.ok((await executeTool('delete_rhythm', { rhythmId: ok.rhythm.id })).error);
+});
+
 test('judge flags low scores as correction events, skips rated', async () => {
   db._reset();
   await setDoc('settings/hub', { geminiKey: 'k', judgeModel: 'lite-m' }, false);
