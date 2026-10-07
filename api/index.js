@@ -435,6 +435,10 @@ app.post('/api/goals', requireAuth, async (req, res) => {
   const rec = await addDoc('goals', { goal: req.body.goal, by: req.body.by || '', status: 'active', createdAt: nowIso() });
   res.json({ ok: true, goal: rec });
 });
+app.delete('/api/goals/:id', requireAuth, async (req, res) => {
+  await deleteDoc('goals/' + req.params.id);
+  res.json({ ok: true });
+});
 
 // ---- tasks ----
 app.get('/api/tasks', requireAuth, async (req, res) => {
@@ -531,6 +535,28 @@ app.post('/api/milestones/:id/toggle', requireAuth, async (req, res) => {
   await setDoc('milestones/' + req.params.id, { status: nextStatus });
   if (nextStatus === 'done') await notify('Milestone completed 🎉', doc.title, 'milestone', 'success', { source: 'milestone' });
   res.json({ ok: true, status: nextStatus });
+});
+app.post('/api/milestones', requireAuth, async (req, res) => {
+  const b = req.body || {};
+  if (!b.title) return res.status(400).json({ ok: false, error: 'title required' });
+  const rec = await addDoc('milestones', {
+    title: b.title, dueAt: b.dueAt || '', category: b.category || 'milestone',
+    status: b.status || 'pending', phase: b.phase || '', createdAt: nowIso(),
+  });
+  res.json({ ok: true, milestone: rec });
+});
+app.delete('/api/milestones/:id', requireAuth, async (req, res) => {
+  await deleteDoc('milestones/' + req.params.id);
+  res.json({ ok: true });
+});
+app.patch('/api/phases/:id', requireAuth, async (req, res) => {
+  const doc = await getDoc('phases/' + req.params.id);
+  if (!doc) return res.status(404).json({ ok: false, error: 'not found' });
+  const patch = {};
+  ['label', 'status', 'focus'].forEach((k) => { if (req.body[k] !== undefined) patch[k] = req.body[k]; });
+  if (!Object.keys(patch).length) return res.status(400).json({ ok: false, error: 'nothing to update' });
+  await setDoc('phases/' + req.params.id, patch);
+  res.json({ ok: true });
 });
 app.get('/api/phases', requireAuth, async (req, res) => {
   const phases = await listDocs('phases');
