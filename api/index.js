@@ -979,6 +979,29 @@ app.delete('/api/professors/:id', requireAuth, async (req, res) => {
   res.json({ ok: true });
 });
 
+// ---- mission: rhythms (time-varying weekly overrides) ----
+app.get('/api/rhythms', requireAuth, async (req, res) => {
+  const items = await listDocs('rhythms');
+  items.sort((a, b) => (a.startDate || '').localeCompare(b.startDate || ''));
+  res.json({ ok: true, rhythms: items });
+});
+app.post('/api/rhythms', requireAuth, async (req, res) => {
+  const b = req.body || {};
+  if (!b.name || !/^\d{4}-\d{2}-\d{2}$/.test(b.startDate || '') || !/^\d{4}-\d{2}-\d{2}$/.test(b.endDate || '')) {
+    return res.status(400).json({ ok: false, error: 'name, startDate (YYYY-MM-DD), endDate (YYYY-MM-DD) required' });
+  }
+  const rec = await addDoc('rhythms', {
+    name: b.name, startDate: b.startDate, endDate: b.endDate,
+    academic: b.academic !== undefined ? b.academic : 2, technical: b.technical !== undefined ? b.technical : 1,
+    note: b.note || '', status: 'active', createdAt: nowIso(),
+  });
+  res.json({ ok: true, rhythm: rec });
+});
+app.delete('/api/rhythms/:id', requireAuth, async (req, res) => {
+  await deleteDoc('rhythms/' + req.params.id);
+  res.json({ ok: true });
+});
+
 // ---- mission: CGPA ----
 app.get('/api/cgpa', requireAuth, async (req, res) => {
   const c = await getDoc('mission/cgpa');
