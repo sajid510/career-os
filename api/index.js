@@ -394,7 +394,7 @@ app.get('/api/overview', requireAuth, async (req, res) => {
         milestonesTotal: milestones.length,
         unreadNotifications: unread,
       },
-      dueTodayTasks: dueToday.map((t) => ({ id: t.id, title: t.title, category: t.category, priority: t.priority, source: t.source || '' })),
+      dueTodayTasks: dueToday.map((t) => ({ id: t.id, title: t.title, category: t.category, priority: t.priority, source: t.source || '', targetSeconds: t.targetSeconds || 0 })),
       todayClasses: todayClasses,
       nextDeadlines: nextDeadlines.map((d) => ({ id: d.id, title: d.title, human: inDays(d.dueAt), date: humanDate(d.dueAt), critical: !!d.critical, category: d.category })),
       notifications: recentNotifications.map((n) => ({ id: n.id, title: n.title, body: n.body, type: n.type, read: n.read, createdAt: n.createdAt })),
@@ -440,7 +440,7 @@ app.post('/api/goals', requireAuth, async (req, res) => {
 app.get('/api/tasks', requireAuth, async (req, res) => {
   let tasks = await listDocs('tasks');
   tasks = tasks.sort((a, b) => ((a.dueAt || '9999').localeCompare(b.dueAt || '9999')));
-  res.json({ ok: true, tasks: tasks.map((t) => ({ id: t.id, title: t.title, description: t.description || '', category: t.category, priority: t.priority, status: t.status, dueAt: t.dueAt, human: t.dueAt ? inDays(t.dueAt) : '', phase: t.phase || '', source: t.source || '', outcome: t.outcome || '', rating: t.rating || 0, completedAt: t.completedAt || '' })) });
+  res.json({ ok: true, tasks: tasks.map((t) => ({ id: t.id, title: t.title, description: t.description || '', category: t.category, priority: t.priority, status: t.status, dueAt: t.dueAt, human: t.dueAt ? inDays(t.dueAt) : '', phase: t.phase || '', source: t.source || '', targetSeconds: t.targetSeconds || 0, outcome: t.outcome || '', rating: t.rating || 0, completedAt: t.completedAt || '' })) });
 });
 app.post('/api/tasks', requireAuth, async (req, res) => {
   const rec = await addDoc('tasks', {
