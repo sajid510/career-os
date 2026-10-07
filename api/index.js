@@ -376,7 +376,8 @@ app.get('/api/overview', requireAuth, async (req, res) => {
       .map((e) => ({ title: e.title, course: e.course || '', startTime: e.startTime, endTime: e.endTime || '', room: e.room || '', teacher: e.teacher || '' }));
 
     const openTasks = tasks.filter((t) => t.status !== 'done');
-    const dueToday = openTasks.filter((t) => t.dueAt && toLocalDateStr(t.dueAt) === toLocalDateStr(today.toISOString()));
+    const todayStr = toLocalDateStr(new Date().toISOString());
+    const dueToday = openTasks.filter((t) => t.dueAt && toLocalDateStr(t.dueAt) === todayStr);
     const overdue = openTasks.filter((t) => t.dueAt && t.dueAt < today.toISOString());
     const nextDeadlines = deadlines.filter((d) => d.dueAt && daysUntil(d.dueAt) >= 0).sort((a, b) => a.dueAt.localeCompare(b.dueAt)).slice(0, 6);
     const recentNotifications = notifications.sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || '')).slice(0, 12);
@@ -384,7 +385,7 @@ app.get('/api/overview', requireAuth, async (req, res) => {
 
     res.json({
       ok: true,
-      today: toLocalDateStr(today.toISOString()),
+      today: todayStr,
       stats: {
         openTasks: openTasks.length,
         dueToday: dueToday.length,
