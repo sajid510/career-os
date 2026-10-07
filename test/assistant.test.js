@@ -15,7 +15,7 @@ const { listDocs, addDoc, setDoc } = require('../lib/util');
 test('tool catalog grew: tracker, delete, routine, notes, profile tools exist', () => {
   const names = TOOL_DEFS.map((t) => t.name);
   for (const n of ['delete_task', 'delete_deadline', 'toggle_milestone', 'run_daily_routine',
-    'list_scholarships', 'update_scholarship', 'list_universities', 'update_university',
+    'list_scholarships', 'add_scholarship', 'update_scholarship', 'list_universities', 'update_university',
     'list_professors', 'update_professor', 'get_cgpa', 'update_cgpa', 'list_notes', 'add_note',
     'search_notes', 'update_profile', 'get_relevant_memory']) {
     assert.ok(names.includes(n), 'tool present: ' + n);
@@ -29,6 +29,17 @@ test('delete_task / delete_deadline remove docs (confirmation is a prompt rule)'
   assert.strictEqual((await executeTool('delete_task', { taskId: t.id })).error, 'task not found');
   const d = await addDoc('deadlines', { title: 'Temp dl', dueAt: '2027-01-01T00:00:00.000Z' });
   assert.ok((await executeTool('delete_deadline', { deadlineId: d.id })).ok);
+});
+
+test('add_scholarship creates entries with defaults, requires name', async () => {
+  db._reset();
+  assert.ok((await executeTool('add_scholarship', {})).error);
+  const r = await executeTool('add_scholarship', { name: 'Test Sch', country: 'X' });
+  assert.ok(r.ok && r.scholarship.id);
+  const items = await listDocs('scholarships');
+  assert.strictEqual(items.length, 1);
+  assert.strictEqual(items[0].status, 'Research');
+  assert.strictEqual(items[0].priority, 'B');
 });
 
 test('toggle_milestone flips by title, update_scholarship patches allowlist', async () => {
