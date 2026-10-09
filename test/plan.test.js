@@ -27,11 +27,11 @@ test('all tasks have unique titles, descriptions and valid dates', () => {
   }
 });
 
-test('plan tasks start at/after August 2026 and end at/around December 2027', () => {
+test('plan tasks start at/after August 2026 and end within the 2028 cycle', () => {
   const earliest = Math.min(...p.TASKS.map((t) => new Date(t.dueAt).getTime()));
   const latest = Math.max(...p.TASKS.map((t) => new Date(t.dueAt).getTime()));
   assert.ok(earliest >= Date.parse('2026-08-01T00:00:00Z'), 'starts in August 2026 or later');
-  assert.ok(latest <= Date.parse('2028-01-01T00:00:00Z'), 'does not extend past 2028');
+  assert.ok(latest <= Date.parse('2028-09-01T00:00:00Z'), 'does not extend past the 2028 cycle');
 });
 
 test('deadlines have valid dates and phases that exist', () => {
