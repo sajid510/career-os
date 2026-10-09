@@ -587,13 +587,18 @@ function loadOverview() {
     document.getElementById('dueToday').innerHTML = o.dueTodayTasks.length
       ? o.dueTodayTasks.map((t) => {
         const routineKey = t.source === 'daily-routine' ? (t.title.includes('Academic study') ? 'study' : (t.title.includes('Project / technical') ? 'project' : '')) : '';
-        if (routineKey && (!linkedTask[routineKey] || !linkedTask[routineKey].done)) linkedTask[routineKey] = { id: t.id, done: false, targetSeconds: t.targetSeconds || 0 };
+        if (routineKey && (!linkedTask[routineKey] || !linkedTask[routineKey].done)) linkedTask[routineKey] = { id: t.id, done: false, targetSeconds: t.targetSeconds || 0, title: t.title };
         const timerUI = routineKey
           ? ' <span class="tag live" id="ov-' + routineKey + '">⏱ ' + TIMER_DEFS[routineKey].targetLabel + ' left</span>'
           : '';
         return '<div class="item"><div class="dot ' + (t.priority === 'critical' ? 'crit' : 'high') + '"></div><div class="txt"><div class="t">' + esc(t.title) + '</div><div class="d">' + esc(t.category) + '</div>' + timerUI + '</div></div>';
       }).join('')
       : '<div class="empty">Nothing due today ✅</div>';
+    for (const key of ['study', 'project']) {
+      const line = document.getElementById('tm-' + key + '-link');
+      const link = linkedTask[key];
+      if (line && link) line.textContent = link.done ? '✅ Completed today' : ('🔗 Linked: ' + (link.title || 'today\'s routine task'));
+    }
     renderTimers();
 
     document.getElementById('nextDeadlines').innerHTML = o.nextDeadlines.length
@@ -697,7 +702,7 @@ function linkFocusTimers(tasks) {
     const line = document.getElementById('tm-' + key + '-link');
     if (!t) { linkedTask[key] = null; if (line) line.innerHTML = 'Today\'s routine not generated yet. <button class="btn" onclick="api(\'/api/routine/today\',\'POST\').then(loadOverview).catch((e)=>toast(e.message))">Generate</button>'; continue; }
     const done = t.status === 'done';
-    linkedTask[key] = { id: t.id, done, targetSeconds: t.targetSeconds || 0 };
+    linkedTask[key] = { id: t.id, done, targetSeconds: t.targetSeconds || 0, title: t.title };
     if (done && timerState[key].running) { timerState[key].running = false; timerState[key].elapsed = targetOf(key); saveTimers(); }
     if (line) line.textContent = done ? '✅ Completed today' : '🔗 Linked: ' + t.title;
   }
