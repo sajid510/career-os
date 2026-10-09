@@ -12,7 +12,10 @@ function makeDb() {
     doc(path) {
       return {
         get: async () => ({ exists: docs.has(path), data: () => docs.get(path) }),
-        set: async (data) => { docs.set(path, data); },
+        set: async (data, opts) => {
+          if (opts && opts.merge && docs.has(path)) docs.set(path, Object.assign({}, docs.get(path), data));
+          else docs.set(path, data);
+        },
         delete: async () => { docs.delete(path); },
       };
     },
