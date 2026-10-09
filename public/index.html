@@ -183,6 +183,33 @@ footer{color:var(--mut);font-size:11.5px;text-align:center;padding:26px 0 14px}
 
   <!-- OVERVIEW -->
   <section id="tab-overview">
+    <div class="card" style="margin-bottom:12px">
+      <h3>🗓️ Weekly rhythm</h3>
+      <div id="rhythmBanner" style="font-size:12.5px;color:var(--mut);margin-bottom:8px">Loading rhythm…</div>
+      <div class="week" id="weekStrip" style="grid-template-columns:repeat(7,1fr)"></div>
+      <div class="grid two" style="margin-top:10px">
+        <div class="tcard" id="tm-study">
+          <div class="ttitle">📚 Academic study <span class="tag" id="tm-study-target"></span></div>
+          <div class="ttime" id="tm-study-time">…</div>
+          <div class="pbar"><div class="pfill" id="tm-study-fill"></div></div>
+          <div class="trow">
+            <button class="btn" id="tm-study-btn" onclick="toggleTimer('study')">▶ Start</button>
+            <button class="btn" onclick="resetTimer('study')">↺ Reset</button>
+          </div>
+          <div class="tlink" id="tm-study-link">Linking today's task…</div>
+        </div>
+        <div class="tcard" id="tm-project">
+          <div class="ttitle">🛠️ Project / technical <span class="tag" id="tm-project-target"></span></div>
+          <div class="ttime" id="tm-project-time">…</div>
+          <div class="pbar"><div class="pfill" id="tm-project-fill"></div></div>
+          <div class="trow">
+            <button class="btn" id="tm-project-btn" onclick="toggleTimer('project')">▶ Start</button>
+            <button class="btn" onclick="resetTimer('project')">↺ Reset</button>
+          </div>
+          <div class="tlink" id="tm-project-link">Linking today's task…</div>
+        </div>
+      </div>
+    </div>
     <div class="grid stat-grid" id="stats" style="margin-bottom:12px"></div>
     <div class="grid two">
       <div class="card">
@@ -532,7 +559,21 @@ function init() {
 }
 
 // ----- OVERVIEW -----
+function loadRhythm() {
+  api('/api/routine/week').then((o) => {
+    const w = o.week;
+    document.getElementById('rhythmBanner').textContent = w.override
+      ? ('⚡ Override active: ' + w.override.name + ' until ' + w.override.until)
+      : 'Standard week: Fri–Sun 3h academic · Thu academic rest · Fri–Sat 2.5h project · else 2h study + 1h project';
+    document.getElementById('weekStrip').innerHTML = w.days.map((d) =>
+      '<div class="daycol' + (d.isToday ? ' today' : '') + '"><div class="dayname' + (d.isToday ? ' today' : '') + '">' + d.label + ' ' + d.date.slice(8) + '</div>' +
+      '<div class="stime">📚 ' + (d.academic === 'full' ? 'FULL' : (d.academic ? d.academic + 'h' : '—')) + '</div>' +
+      '<div class="sroom">🛠️ ' + (d.technical === 'full' ? 'FULL' : (d.technical ? d.technical + 'h' : '—')) + '</div>' +
+      (d.source !== 'weekly rhythm' ? '<div class="sroom">⚡ ' + esc(String(d.source).slice(0, 18)) + '</div>' : '') + '</div>').join('');
+  }).catch((e) => { const b = document.getElementById('rhythmBanner'); if (b) b.textContent = 'Rhythm unavailable: ' + e.message; });
+}
 function loadOverview() {
+  loadRhythm();
   api('/api/overview').then((o) => {
     document.getElementById('stats').innerHTML = [
       ['Open tasks', o.stats.openTasks, o.stats.overdue ? 'crit' : 'ok'],
@@ -548,12 +589,7 @@ function loadOverview() {
         const routineKey = t.source === 'daily-routine' ? (t.title.includes('Academic study') ? 'study' : (t.title.includes('Project / technical') ? 'project' : '')) : '';
         if (routineKey && (!linkedTask[routineKey] || !linkedTask[routineKey].done)) linkedTask[routineKey] = { id: t.id, done: false, targetSeconds: t.targetSeconds || 0 };
         const timerUI = routineKey
-          ? '<div class="trow" style="margin-top:6px"><span class="ttime" id="tm-' + routineKey + '-time" style="font-size:19px">…</span>' +
-            '<span class="tag live" id="ov-' + routineKey + '">⏱ ' + TIMER_DEFS[routineKey].targetLabel + ' left</span>' +
-            '<button class="btn" id="tm-' + routineKey + '-btn" onclick="toggleTimer(\'' + routineKey + '\')">▶ Start</button>' +
-            '<button class="btn" onclick="resetTimer(\'' + routineKey + '\')">↺</button></div>' +
-            '<div class="pbar" style="margin:6px 0 2px"><div class="pfill" id="tm-' + routineKey + '-fill"></div></div>' +
-            '<div class="tlink" id="tm-' + routineKey + '-link"></div><div id="tm-' + routineKey + '" style="display:none"></div>'
+          ? ' <span class="tag live" id="ov-' + routineKey + '">⏱ ' + TIMER_DEFS[routineKey].targetLabel + ' left</span>'
           : '';
         return '<div class="item"><div class="dot ' + (t.priority === 'critical' ? 'crit' : 'high') + '"></div><div class="txt"><div class="t">' + esc(t.title) + '</div><div class="d">' + esc(t.category) + '</div>' + timerUI + '</div></div>';
       }).join('')
@@ -698,6 +734,8 @@ function renderTimers() {
       cardEl.classList.toggle('done', !!done);
       const badge = document.getElementById('ov-' + key);
       if (badge) badge.textContent = done ? '✅ Done' : (open ? ('⏱ ' + fmtClock(el) + ' so far') : ('⏱ ' + fmtClock(target - Math.min(el, target)) + ' left'));
+      const tgt = document.getElementById('tm-' + key + '-target');
+      if (tgt) tgt.textContent = open ? 'FULL DAY' : fmtDur(target);
       if (!open && el >= target && !cardEl.dataset.finished) { cardEl.dataset.finished = '1'; finishTimer(key); }
       if ((open || el < target) && cardEl.dataset.finished) delete cardEl.dataset.finished;
     } catch (err) {

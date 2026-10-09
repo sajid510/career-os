@@ -4,10 +4,11 @@ const { test } = require('node:test');
 const assert = require('node:assert');
 const { PROFILE } = require('../lib/profile');
 
-test('profile reflects post-BSc status: no pre-BSc IELTS, current roles and submissions', () => {
+test('profile reflects strategy v2: July-2027 IELTS program, current roles and submissions', () => {
   const strings = [];
   JSON.stringify(PROFILE, (k, v) => (typeof v === 'string' ? (strings.push(v), v) : v));
-  assert.ok(!strings.some((s) => /ielts/i.test(s) && /2026/.test(s)), 'no 2026 IELTS commitment remains');
+  assert.ok(!strings.some((s) => /ielts/i.test(s) && /2026/.test(s)), 'no 2026 IELTS exam remains');
+  assert.ok(strings.some((s) => /IELTS.*Jul.*2027|Jul.*2027.*IELTS/i.test(s)), 'July-2027 IELTS program present');
   assert.ok(PROFILE.leadership.some((l) => l.includes('Webmaster') && l.includes('WIE')), 'Webmaster @ WIE present');
   assert.ok(!PROFILE.leadership.some((l) => l.includes('EEE Project Club')), 'EEE Project Club role removed');
   assert.ok(PROFILE.achievements.some((a) => a.includes('Top 38') && a.includes('BEAR Summit 2026')), 'BEAR Summit achievement present');

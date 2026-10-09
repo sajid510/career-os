@@ -83,15 +83,18 @@ test('phases: patch status and focus', async () => {
 });
 
 test('overview dueToday works in the evening Dhaka window (no double timezone shift)', async () => {
-  const realNow = Date.now;
-  // Freeze at 21:32 Dhaka (15:32 UTC): the old code reported today as tomorrow.
-  Date.now = () => Date.parse('2026-10-07T15:32:00.000Z');
+  const RealDate = Date;
+  const frozen = Date.parse('2026-10-07T15:32:00.000Z');
+  global.Date = class extends RealDate {
+    constructor(...a) { super(...(a.length ? a : [frozen])); }
+    static now() { return frozen; }
+  };
   try {
     await db.collection('tasks').add({ title: 'Evening probe', status: 'open', category: 'general', priority: 'low', dueAt: '2026-10-07T17:59:00.000Z' });
     const o = await api('/api/overview');
     assert.strictEqual(o.json.today, '2026-10-07');
     assert.ok(o.json.dueTodayTasks.some((t) => t.title === 'Evening probe'), 'evening task is due today');
   } finally {
-    Date.now = realNow;
+    global.Date = RealDate;
   }
 });

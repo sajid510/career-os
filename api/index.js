@@ -507,6 +507,10 @@ app.post('/api/routine/today', requireAuth, async (req, res) => {
   const result = await ensureDailyRoutine();
   res.json({ ok: true, routine: result });
 });
+app.get('/api/routine/week', requireAuth, async (req, res) => {
+  const { resolveWeek } = require('../lib/routine');
+  res.json({ ok: true, week: await resolveWeek() });
+});
 
 // ---- deadlines ----
 app.get('/api/deadlines', requireAuth, async (req, res) => {
