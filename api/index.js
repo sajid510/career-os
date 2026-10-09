@@ -567,6 +567,15 @@ app.get('/api/phases', requireAuth, async (req, res) => {
   const phases = await listDocs('phases');
   res.json({ ok: true, phases });
 });
+app.post('/api/phases', requireAuth, async (req, res) => {
+  const b = req.body || {};
+  if (!b.key) return res.status(400).json({ ok: false, error: 'key required' });
+  const rec = await addDoc('phases', {
+    key: b.key, label: b.label || b.key, start: b.start || '', end: b.end || '',
+    status: b.status || 'pending', focus: b.focus || [], createdAt: nowIso(),
+  });
+  res.json({ ok: true, phase: rec });
+});
 
 // ---- plan ----
 app.get('/api/plan', requireAuth, async (req, res) => {

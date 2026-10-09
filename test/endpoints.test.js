@@ -68,6 +68,12 @@ test('goals: create and delete', async () => {
   assert.ok((await api('/api/goals/' + g.id, 'DELETE')).json.ok);
 });
 
+test('phases: create via POST', async () => {
+  const r = await api('/api/phases', 'POST', { key: 'Cycle28', label: 'L', status: 'pending', focus: ['x'] });
+  assert.ok(r.json.ok && r.json.phase.id);
+  assert.strictEqual((await api('/api/phases', 'POST', {})).status, 400);
+});
+
 test('phases: patch status and focus', async () => {
   await db.collection('phases').add({ key: 'Restart', label: 'R', status: 'active', focus: ['a'] });
   const list = await api('/api/phases');
