@@ -370,7 +370,18 @@ footer{color:var(--mut);font-size:11.5px;text-align:center;padding:26px 0 14px}
           <button class="btn" onclick="addScholarship()">Add</button>
         </div>
       </div>
-      <div class="card"><h3>🎯 Scholarships</h3><div id="scholarshipsList"></div></div>
+      <div class="card"><h3>🎯 Scholarships</h3>
+        <div id="schNext" style="font-size:13px;color:var(--mut);margin-bottom:8px"></div>
+        <div class="trow" style="margin-bottom:8px" id="schFilters">
+          <button class="btn ghost" onclick="setSchFilter('all')">All</button>
+          <button class="btn ghost" onclick="setSchFilter('A')">🔴 Priority A</button>
+          <button class="btn ghost" onclick="setSchFilter('action')">⚡ Needs action</button>
+          <button class="btn ghost" onclick="setSchFilter('applied')">✅ Applied+</button>
+          <button class="btn ghost" onclick="toggleSchSort()">⇅ <span id="schSortLabel">Deadline</span></button>
+        </div>
+        <div class="grid stat-grid" id="schStats" style="margin-bottom:8px"></div>
+        <div id="scholarshipsList"></div>
+      </div>
     </div>
 
     <!-- Universities -->
@@ -945,21 +956,78 @@ const SCH_ST = ['Research', 'Planning', 'Docs Prep', 'Applied', 'Interview', 'Ac
 const UNI_ST = ['Research', 'Shortlisted', 'Prof. Contacted', 'App Prep', 'Applied', 'Interview', 'Accepted', 'Rejected'];
 const PROF_ST = ['To Contact', 'Emailed', 'No Response', 'Responded', 'Meeting Set', 'Positive', 'Negative'];
 
+let SCH_FILTER = 'all';
+let SCH_SORT = 'deadline';
+let SCH_CACHE = [];
+function setSchFilter(f) { SCH_FILTER = f; renderScholarships(); }
+function toggleSchSort() {
+  SCH_SORT = SCH_SORT === 'deadline' ? 'priority' : 'deadline';
+  document.getElementById('schSortLabel').textContent = SCH_SORT === 'deadline' ? 'Deadline' : 'Priority';
+  renderScholarships();
+}
+function schItems(s) {
+  if (Array.isArray(s.checklist) && s.checklist.length) return s.checklist;
+  return String(s.docs || '').split(',').map((x) => x.trim()).filter(Boolean).map((item) => ({ item, done: false }));
+}
+function schPct(s) {
+  const items = schItems(s);
+  if (!items.length) return { done: 0, total: 0, pct: null };
+  const done = items.filter((i) => i.done).length;
+  return { done, total: items.length, pct: Math.round((done / items.length) * 100) };
+}
+function schDays(s) {
+  if (!s.deadline) return null;
+  return Math.ceil((new Date(s.deadline) - new Date()) / 86400000);
+}
+function renderScholarships() {
+  const list = SCH_CACHE.slice();
+  list.sort((a, b) => SCH_SORT === 'deadline'
+    ? (a.deadline || '9999').localeCompare(b.deadline || '9999')
+    : (a.priority || 'C').localeCompare(b.priority || 'C'));
+  const vis = list.filter((s) => {
+    if (SCH_FILTER === 'A') return s.priority === 'A';
+    if (SCH_FILTER === 'applied') return ['Applied', 'Interview', 'Accepted'].includes(s.status);
+    if (SCH_FILTER === 'action') { const r = schPct(s), d = schDays(s); return (r.pct === null || r.pct < 100) && (d === null || d <= 60); }
+    return true;
+  });
+  const withDl = list.filter((s) => schDays(s) !== null && schDays(s) >= 0);
+  const avg = list.length ? Math.round(list.reduce((a, s) => { const r = schPct(s); return a + (r.pct === null ? 0 : r.pct); }, 0) / list.length) : 0;
+  document.getElementById('schStats').innerHTML =
+    '<div class="stat ok"><div class="n">' + list.length + '</div><div class="l">Tracked</div></div>' +
+    '<div class="stat ' + (avg >= 70 ? 'ok' : 'warn') + '"><div class="n">' + avg + '%</div><div class="l">Avg ready</div></div>' +
+    '<div class="stat ' + (withDl.length ? 'warn' : 'ok') + '"><div class="n">' + withDl.length + '</div><div class="l">Open deadlines</div></div>';
+  const next = withDl
+    .filter((s) => !['Applied', 'Accepted', 'Rejected'].includes(s.status))
+    .sort((a, b) => (a.deadline || '').localeCompare(b.deadline || ''))[0];
+  if (next) {
+    const r = schPct(next), d = schDays(next);
+    const missing = schItems(next).filter((i) => !i.done).slice(0, 2).map((i) => i.item).join('; ');
+    document.getElementById('schNext').innerHTML = '🎯 Next move: <strong>' + esc(next.name) + '</strong> — ' + d + 'd left · ' + (r.pct === null ? 'checklist empty' : r.pct + '% ready') + (missing ? ' · missing: ' + esc(missing) : '');
+  } else document.getElementById('schNext').innerHTML = '🎯 Nothing urgent — all tracked routes applied or decided.';
+  document.getElementById('scholarshipsList').innerHTML = vis.length ? vis.map((s) => {
+    const d = schDays(s);
+    const r = schPct(s);
+    const pri = s.priority === 'A' ? 'crit' : s.priority === 'B' ? 'warn' : 'low';
+    const bar = r.pct === null ? '' : '<div class="pbar" style="margin:6px 0 2px"><div class="pfill" style="width:' + r.pct + '%;background:' + (r.pct >= 100 ? 'var(--ok)' : r.pct >= 50 ? 'var(--warn)' : 'var(--crit)') + '"></div></div>';
+    return '<div class="item"><div class="dot ' + pri + '"></div><div class="txt">' +
+      '<div class="t">' + esc(s.name) + ' <span class="tag">' + esc(s.country || '') + '</span>' + (d !== null ? '<span class="tag ' + (d <= 30 && d >= 0 ? 'soon' : '') + '">' + (d >= 0 ? d + 'd' : 'past') + '</span>' : '') + (r.pct !== null ? '<span class="tag live">' + r.pct + '%</span>' : '') + '</div>' +
+      '<div class="d"><input type="date" value="' + esc((s.deadline || '').slice(0, 10)) + '" onchange="setScholarshipField(\'' + s.id + '\',\'deadline\',this.value)" style="padding:2px 6px;font-size:12px"> · GPA ' + esc(s.cgpaReq || '-') + (s.coverage ? ' · ' + esc(s.coverage) : '') + '</div>' +
+      (s.notes ? '<div class="d">📌 ' + esc(s.notes) + '</div>' : '') + bar +
+      '<div class="d"><button class="btn" style="padding:2px 8px" onclick="toggleScorecard(\'' + s.id + '\')">☑ Checklist</button> <span id="sc-' + s.id + '"></span></div>' +
+      '</div><select onchange="setScholarship(\'' + s.id + '\',this.value)" style="width:110px;padding:4px 6px;font-size:12px">' + SCH_ST.map((x) => '<option ' + (s.status === x ? 'selected' : '') + '>' + x + '</option>').join('') + '</select>' +
+      (s.url ? '<a href="' + esc(s.url) + '" target="_blank" style="font-size:14px">🔗</a>' : '') +
+      '<button onclick="delScholarship(\'' + s.id + '\')" style="background:none;border:none;color:var(--mut);font-size:14px">🗑️</button></div>';
+  }).join('') : '<div class="empty">No scholarships match this filter</div>';
+}
+function setScholarshipField(id, field, value) {
+  const body = {};
+  body[field] = value;
+  api('/api/scholarships/' + id, 'PATCH', body).then(() => { toast('Saved'); loadScholarships(); }).catch((e) => toast(e.message));
+}
 function loadScholarships() {
   api('/api/scholarships').then((o) => {
-    const list = o.scholarships || [];
-    document.getElementById('scholarshipsList').innerHTML = list.length ? list.map((s) => {
-      const d = s.deadline ? Math.ceil((new Date(s.deadline) - new Date()) / 86400000) : null;
-      const pri = s.priority === 'A' ? 'crit' : s.priority === 'B' ? 'warn' : 'low';
-      return '<div class="item"><div class="dot ' + pri + '"></div><div class="txt">' +
-        '<div class="t">' + esc(s.name) + ' <span class="tag">' + esc(s.country || '') + '</span>' + (d !== null ? '<span class="tag ' + (d <= 30 ? 'soon' : '') + '">' + (d >= 0 ? d + 'd' : 'past') + '</span>' : '') + '</div>' +
-        '<div class="d">' + (s.deadline ? esc(fmt(s.deadline)) : '') + ' · GPA ' + esc(s.cgpaReq || '-') + (s.coverage ? ' · ' + esc(s.coverage) : '') + '</div>' +
-        (s.notes ? '<div class="d">📌 ' + esc(s.notes) + '</div>' : '') +
-        '<div class="d"><button class="btn" style="padding:2px 8px" onclick="toggleScorecard(\'' + s.id + '\')">☑ Checklist</button> <span id="sc-' + s.id + '"></span></div>' +
-        '</div><select onchange="setScholarship(\'' + s.id + '\',this.value)" style="width:110px;padding:4px 6px;font-size:12px">' + SCH_ST.map((x) => '<option ' + (s.status === x ? 'selected' : '') + '>' + x + '</option>').join('') + '</select>' +
-        (s.url ? '<a href="' + esc(s.url) + '" target="_blank" style="font-size:14px">🔗</a>' : '') +
-        '<button onclick="delScholarship(\'' + s.id + '\')" style="background:none;border:none;color:var(--mut);font-size:14px">🗑️</button></div>';
-    }).join('') : '<div class="empty">No scholarships yet</div>';
+    SCH_CACHE = o.scholarships || [];
+    renderScholarships();
   }).catch((e) => toast(e.message));
 }
 function addScholarship() {
