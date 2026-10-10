@@ -1,0 +1,9 @@
+{
+  "name": "Career OS — Command Center",
+  "short_name": "Career OS",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0b1220",
+  "theme_color": "#0b1220",
+  "description": "Self-learning career command center: tasks, routine timers, mission trackers, Pulse AI."
+}

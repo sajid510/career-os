@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="theme-color" content="#0b1220">
+<link rel="manifest" href="/manifest.json">
 <title>Career OS — Command Center</title>
 <style>
 :root{--bg:#0b1220;--panel:#111a2e;--panel2:#0f1626;--line:#1f2b47;--txt:#e6edf7;--mut:#8fa3c0;--acc:#38bdf8;--ok:#34d399;--warn:#fbbf24;--err:#f87171;--crit:#f87171;}
@@ -176,6 +177,7 @@ footer{color:var(--mut);font-size:11.5px;text-align:center;padding:26px 0 14px}
       <button data-tab="mission">Mission</button>
       <button data-tab="ai">AI Assistant</button>
       <button data-tab="learning">Learning</button>
+      <button data-tab="planner">Planner</button>
       <button data-tab="settings">Settings</button>
     </nav>
     <button class="btn ghost" onclick="logout()" style="padding:6px 10px;font-size:12px">Sign out</button>
@@ -449,6 +451,28 @@ footer{color:var(--mut);font-size:11.5px;text-align:center;padding:26px 0 14px}
       <div class="card"><h3>🧠 Learned facts about you</h3><div id="facts"></div></div>
       <div class="card"><h3>📈 Learning events</h3><div id="learnEvents"></div></div>
     </div>
+    <div class="grid two" style="margin-top:12px">
+      <div class="card"><h3>📖 Issue playbooks</h3><div id="playbooks"></div></div>
+      <div class="card"><h3>📊 Latest weekly review</h3><div id="weekReview"></div></div>
+    </div>
+  </section>
+
+  <!-- PLANNER -->
+  <section id="tab-planner" class="hidden">
+    <div class="grid two">
+      <div class="card"><h3>🎯 Goals</h3><div id="goalsList"></div>
+        <div class="row" style="margin-top:8px"><input class="grow" id="gGoal" placeholder="New goal"><input id="gBy" placeholder="by when"><button class="btn" onclick="addGoal()">Add</button></div>
+      </div>
+      <div class="card"><h3>📅 Events</h3><div id="eventsList"></div>
+        <div class="row" style="margin-top:8px"><input class="grow" id="eTitle" placeholder="New event"><input id="eAt" type="datetime-local"><button class="btn" onclick="addEvent()">Add</button></div>
+      </div>
+    </div>
+    <div class="grid two" style="margin-top:12px">
+      <div class="card"><h3>🔁 Rhythm overrides</h3><div id="rhythmsList"></div>
+        <div class="row" style="margin-top:8px"><input class="grow" id="rhName" placeholder="Name"><input id="rhFrom" type="date"><input id="rhTo" type="date"><button class="btn" onclick="addRhythm()">Add</button></div>
+      </div>
+      <div class="card"><h3>📣 Follow-ups due</h3><div id="followList"></div></div>
+    </div>
   </section>
 
   <!-- SETTINGS -->
@@ -465,6 +489,18 @@ footer{color:var(--mut);font-size:11.5px;text-align:center;padding:26px 0 14px}
       <div class="settings-row"><div class="l">Gemini key</div><div class="v" id="sKeyState"></div></div>
       <div class="settings-row"><div class="l">career-io webhook</div><div class="v" id="sCareer"></div></div>
       <div class="settings-row"><div class="l">Hub token</div><div class="v" id="sToken"></div></div>
+    </div>
+    <div class="card">
+      <h3>🔔 Notifications</h3>
+      <div class="settings-row"><div class="l">Digest mode (store all, push only warnings)</div><div class="v"><button class="btn ghost" id="digestBtn" onclick="toggleDigest()">…</button></div></div>
+    </div>
+    <div class="card">
+      <h3>📊 Free-tier usage</h3>
+      <div id="quotaBox"><div class="empty">Loading…</div></div>
+    </div>
+    <div class="card">
+      <h3>💾 Backup</h3>
+      <div class="row"><button class="btn" onclick="exportAll()">Download full backup (JSON)</button></div>
     </div>
     <div class="card">
       <h3>🔗 Connectors</h3>
@@ -541,6 +577,7 @@ document.querySelectorAll('nav button').forEach((b) => b.addEventListener('click
   if (tab === 'classes') loadClasses();
   if (tab === 'mission') loadMission();
   if (tab === 'learning') loadLearning();
+  if (tab === 'planner') loadPlanner();
   if (tab === 'settings') loadSettings();
   if (tab === 'ai') { restoreChatLog(); document.getElementById('chatInput').focus(); }
 }));
@@ -556,6 +593,7 @@ function init() {
   else if (q.get('classroom') && q.get('classroom').startsWith('error')) { toast('Classroom error: ' + q.get('classroom').slice(6)); history.replaceState({}, '', location.pathname); }
   loadOverview();
   setInterval(renderTimers, 1000); renderTimers();
+  if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(() => {});
 }
 
 // ----- OVERVIEW -----
@@ -609,14 +647,18 @@ function loadOverview() {
       ? o.systems.map((s) => '<div class="sys"><div class="st ' + (s.status === 'ok' ? 'ok' : 'err') + '"></div><div class="n">' + esc(s.name) + '</div><div class="s">' + esc(s.summary || s.status) + '</div></div>').join('')
       : '<div class="empty">No systems synced yet</div>';
 
-    document.getElementById('notifications').innerHTML = o.notifications.length
-      ? o.notifications.map((n) => '<div class="notif ' + (n.read ? '' : 'unread') + '"><div class="ic">' + ic(n.type) + '</div><div><div class="t">' + esc(n.title) + '</div><div class="b">' + esc(n.body) + '</div><div class="tm">' + fmt(n.createdAt) + '</div></div></div>').join('')
-      : '<div class="empty">No notifications yet</div>';
+    document.getElementById('notifications').innerHTML = (o.notifications.length
+      ? '<div style="text-align:right;margin-bottom:6px"><button class="btn" style="padding:2px 10px" onclick="markAllRead()">Mark all read</button></div>' : '') + (o.notifications.length
+      ? o.notifications.map((n) => '<div class="notif ' + (n.read ? '' : 'unread') + '"><div class="ic">' + ic(n.type) + '</div><div style="flex:1"><div class="t">' + esc(n.title) + '</div><div class="b">' + esc(n.body) + '</div><div class="tm">' + fmt(n.createdAt) + '</div></div><div>' + (n.read ? '' : '<button class="btn" style="padding:2px 8px" onclick="readNotif(\'' + n.id + '\')">✓</button>') + ' <button class="btn" style="padding:2px 8px" onclick="delNotif(\'' + n.id + '\')">✕</button></div></div>').join('')
+      : '<div class="empty">No notifications yet</div>');
   }).catch((e) => toast('Overview: ' + e.message));
 }
 function ic(t) { return { deadline: '⏰', task: '✅', connector: '🔌', agent: '🤖', milestone: '🏁', reminder: '🔔', system: '🛰️' }[t] || '🔔'; }
 
 function syncSystems() { toast('Syncing connectors...'); api('/api/systems/sync', 'POST', { scope: 'light' }).then((r) => { toast('Synced'); loadOverview(); }).catch((e) => toast(e.message)); }
+function readNotif(id) { api('/api/notifications/read', 'POST', { ids: [id] }).then(loadOverview).catch((e) => toast(e.message)); }
+function markAllRead() { api('/api/notifications/read', 'POST', { all: true }).then((r) => { toast('Marked ' + r.marked + ' read'); loadOverview(); }).catch((e) => toast(e.message)); }
+function delNotif(id) { api('/api/notifications/' + id, 'DELETE').then(loadOverview).catch((e) => toast(e.message)); }
 
 // ----- TASKS (Today / This week / This month buckets) -----
 function localDay(offset) { const d = new Date(Date.now() + (offset || 0) * 86400000); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); }
@@ -913,6 +955,7 @@ function loadScholarships() {
         '<div class="t">' + esc(s.name) + ' <span class="tag">' + esc(s.country || '') + '</span>' + (d !== null ? '<span class="tag ' + (d <= 30 ? 'soon' : '') + '">' + (d >= 0 ? d + 'd' : 'past') + '</span>' : '') + '</div>' +
         '<div class="d">' + (s.deadline ? esc(fmt(s.deadline)) : '') + ' · GPA ' + esc(s.cgpaReq || '-') + (s.coverage ? ' · ' + esc(s.coverage) : '') + '</div>' +
         (s.notes ? '<div class="d">📌 ' + esc(s.notes) + '</div>' : '') +
+        '<div class="d"><button class="btn" style="padding:2px 8px" onclick="toggleScorecard(\'' + s.id + '\')">☑ Checklist</button> <span id="sc-' + s.id + '"></span></div>' +
         '</div><select onchange="setScholarship(\'' + s.id + '\',this.value)" style="width:110px;padding:4px 6px;font-size:12px">' + SCH_ST.map((x) => '<option ' + (s.status === x ? 'selected' : '') + '>' + x + '</option>').join('') + '</select>' +
         (s.url ? '<a href="' + esc(s.url) + '" target="_blank" style="font-size:14px">🔗</a>' : '') +
         '<button onclick="delScholarship(\'' + s.id + '\')" style="background:none;border:none;color:var(--mut);font-size:14px">🗑️</button></div>';
@@ -931,6 +974,23 @@ function addScholarship() {
 }
 function setScholarship(id, status) { api('/api/scholarships/' + id, 'PATCH', { status }).then(loadScholarships).catch((e) => toast(e.message)); }
 function delScholarship(id) { api('/api/scholarships/' + id, 'DELETE').then(loadScholarships).catch((e) => toast(e.message)); }
+function toggleScorecard(id) {
+  const el = document.getElementById('sc-' + id);
+  if (!el) return;
+  if (el.dataset.open) { el.innerHTML = ''; delete el.dataset.open; return; }
+  api('/api/scholarships/' + id + '/scorecard').then((o) => {
+    const sc = o.scorecard;
+    el.dataset.open = '1';
+    el.innerHTML = '<div style="margin-top:4px">Readiness ' + sc.done + '/' + sc.total + ' (' + sc.pct + '%)</div>' +
+      sc.items.map((it, i) => '<label style="display:block;font-size:12px"><input type="checkbox" ' + (it.done ? 'checked' : '') + ' onchange="tickItem(\'' + id + '\',\'' + esc(it.item).replace(/'/g, '&#39;') + '\',this.checked)"> ' + esc(it.item) + '</label>').join('');
+  }).catch((e) => toast(e.message));
+}
+function tickItem(id, item, done) {
+  api('/api/scholarships/' + id + '/scorecard').then((o) => {
+    const items = o.scorecard.items.map((it) => it.item === item ? { item: it.item, done } : it);
+    api('/api/scholarships/' + id, 'PATCH', { checklist: items }).then(loadScholarships).catch((e) => toast(e.message));
+  }).catch((e) => toast(e.message));
+}
 
 function loadUniversities() {
   api('/api/universities').then((o) => {
@@ -1063,11 +1123,35 @@ function importCGPA() {
 function loadNotes() {
   api('/api/notes').then((o) => {
     const notes = o.notes || [];
-    document.getElementById('notesList').innerHTML = notes.map((n) =>
-      '<div class="card" style="margin-bottom:12px"><h3 style="color:' + esc(n.color || 'var(--acc)') + '">' + esc(n.title || '') + '</h3>' +
-      ((n.entries || []).map((e) => '<div class="item"><div class="txt"><div class="t">' + esc(e.title || '') + '</div><div class="d" style="white-space:pre-wrap">' + esc(e.content || '') + '</div></div></div>').join('') || '<div class="empty">No entries</div>') +
+    document.getElementById('notesList').innerHTML =
+      '<div class="card" style="margin-bottom:12px"><h3>➕ Notebook</h3><div class="row"><input class="grow" id="nbTitle" placeholder="Notebook title"><button class="btn" onclick="addNotebook()">Add</button></div></div>' +
+      notes.map((n) =>
+      '<div class="card" style="margin-bottom:12px"><h3 style="color:' + esc(n.color || 'var(--acc)') + '">' + esc(n.title || '') + ' <button class="btn" style="padding:2px 8px" onclick="del(\'/api/notes/' + n.id + '\', loadNotes)" title="Delete notebook">🗑️</button></h3>' +
+      ((n.entries || []).map((e, idx) => '<div class="item"><div class="txt"><div class="t">' + esc(e.title || '') + '</div><div class="d" style="white-space:pre-wrap">' + esc(e.content || '') + '</div></div><button class="btn" onclick="delNoteEntry(\'' + n.id + '\',' + idx + ')" title="Delete entry">✕</button></div>').join('') || '<div class="empty">No entries</div>') +
+      '<div class="row" style="margin-top:8px"><input class="grow" id="neTitle' + n.id + '" placeholder="Entry title"><input class="grow" id="neBody' + n.id + '" placeholder="Content"><button class="btn" onclick="addNoteEntry(\'' + n.id + '\')">Add</button></div>' +
       '</div>').join('') || '<div class="empty">No notes</div>';
+    window._notesCache = notes;
   }).catch((e) => toast(e.message));
+}
+function addNotebook() {
+  const title = document.getElementById('nbTitle').value.trim();
+  if (!title) return toast('Enter a title');
+  api('/api/notes', 'POST', { title }).then(loadNotes).catch((e) => toast(e.message));
+}
+function addNoteEntry(id) {
+  const nb = (window._notesCache || []).find((n) => n.id === id);
+  if (!nb) return;
+  const title = document.getElementById('neTitle' + id).value.trim();
+  const content = document.getElementById('neBody' + id).value;
+  if (!title) return toast('Enter a title');
+  const entries = (nb.entries || []).concat([{ title, content, createdAt: new Date().toISOString() }]);
+  api('/api/notes/' + id, 'PATCH', { entries }).then(loadNotes).catch((e) => toast(e.message));
+}
+function delNoteEntry(id, idx) {
+  const nb = (window._notesCache || []).find((n) => n.id === id);
+  if (!nb) return;
+  const entries = (nb.entries || []).filter((_, i) => i !== idx);
+  api('/api/notes/' + id, 'PATCH', { entries }).then(loadNotes).catch((e) => toast(e.message));
 }
 
 // ----- AI (Phase A/B/C: streaming, memory, markdown, voice, ratings, history) -----
@@ -1232,13 +1316,83 @@ function loadLearning() {
       ['Learned facts', o.facts.length, 'ok'],
     ].map(([l, n, cls]) => '<div class="stat ' + cls + '"><div class="n">' + n + '</div><div class="l">' + l + '</div></div>').join('');
     document.getElementById('facts').innerHTML = o.facts.length
-      ? o.facts.map((f) => '<div class="item"><div class="dot med"></div><div class="txt"><div class="t">' + esc(f.fact) + '</div><div class="d">strength ' + (f.strength || 3) + ' · ' + esc(f.source) + '</div></div></div>').join('')
+      ? o.facts.map((f) => '<div class="item"><div class="dot med"></div><div class="txt"><div class="t">' + esc(f.fact) + '</div><div class="d">strength ' + (f.strength || 3) + ' · ' + esc(f.source) + '</div></div><div><button class="btn" style="padding:2px 8px" onclick="factVote(\'' + f.id + '\',1)" title="Confirm">👍</button><button class="btn" style="padding:2px 8px" onclick="factVote(\'' + f.id + '\',-1)" title="Forget">👎</button></div></div>').join('')
       : '<div class="empty">No learned facts yet — use the AI and complete tasks to teach me.</div>';
     document.getElementById('learnEvents').innerHTML = o.events.length
       ? o.events.map((e) => '<div class="item"><div class="txt"><div class="t">' + esc(e.text) + '</div><div class="d">' + fmt(e.ts) + (e.rating ? ' · rated ' + e.rating + '/5' : '') + '</div></div></div>').join('')
       : '<div class="empty">No events yet</div>';
+    loadPlaybooks();
+    loadReview();
   }).catch((e) => toast(e.message));
 }
+function factVote(id, dir) {
+  if (dir > 0) api('/api/learning/fact/' + id + '/reinforce', 'POST').then(loadLearning).catch((e) => toast(e.message));
+  else api('/api/learning/fact/' + id, 'DELETE').then(loadLearning).catch((e) => toast(e.message));
+}
+function loadPlaybooks() {
+  api('/api/playbooks').then((o) => {
+    document.getElementById('playbooks').innerHTML = (o.playbooks || []).map((p) =>
+      '<div class="item"><div class="txt"><div class="t">' + esc(p.title) + '</div><div class="d" style="white-space:pre-wrap">' + esc(p.body || '') + '</div></div></div>').join('')
+      || '<div class="empty">No playbooks</div>';
+  }).catch(() => {});
+}
+function loadReview() {
+  api('/api/review/weekly').then((o) => {
+    const r = o.review;
+    document.getElementById('weekReview').innerHTML = r
+      ? '<div class="item"><div class="txt"><div class="t">Done ' + r.completed7d + ' · streak ' + (r.routineStreak || 0) + 'd</div><div class="d">Focus: ' + esc((r.proposal || []).join(' | ')) + '</div></div></div>'
+      : '<div class="empty">No weekly review yet — runs Sundays</div>';
+  }).catch(() => {});
+}
+
+// ----- PLANNER (goals / events / rhythms / follow-ups) -----
+function loadPlanner() { loadGoals(); loadEvents(); loadRhythmsUI(); loadFollowups(); }
+function loadGoals() {
+  api('/api/goals').then((o) => {
+    document.getElementById('goalsList').innerHTML = (o.goals || []).map((g) =>
+      '<div class="item"><div class="txt"><div class="t">' + esc(g.goal) + '</div><div class="d">' + esc(g.by || '') + ' · ' + esc(g.status || 'active') + '</div></div><button class="btn" style="padding:2px 8px" onclick="api(\'/api/goals/' + g.id + '\',\'DELETE\').then(loadGoals).catch((e)=>toast(e.message))">🗑️</button></div>').join('')
+      || '<div class="empty">No goals</div>';
+  }).catch((e) => toast(e.message));
+}
+function addGoal() {
+  const goal = document.getElementById('gGoal').value.trim();
+  if (!goal) return toast('Enter a goal');
+  api('/api/goals', 'POST', { goal, by: document.getElementById('gBy').value.trim() }).then(() => { document.getElementById('gGoal').value = ''; loadGoals(); }).catch((e) => toast(e.message));
+}
+function loadEvents() {
+  api('/api/events').then((o) => {
+    document.getElementById('eventsList').innerHTML = (o.events || []).map((e) =>
+      '<div class="item"><div class="txt"><div class="t">' + esc(e.title) + '</div><div class="d">' + fmt(e.startAt) + '</div></div><button class="btn" style="padding:2px 8px" onclick="api(\'/api/events/' + e.id + '\',\'DELETE\').then(loadEvents).catch((e)=>toast(e.message))">🗑️</button></div>').join('')
+      || '<div class="empty">No events</div>';
+  }).catch((e) => toast(e.message));
+}
+function addEvent() {
+  const title = document.getElementById('eTitle').value.trim();
+  const at = document.getElementById('eAt').value;
+  if (!title || !at) return toast('Title + date needed');
+  api('/api/events', 'POST', { title, startAt: new Date(at).toISOString() }).then(loadEvents).catch((e) => toast(e.message));
+}
+function loadRhythmsUI() {
+  api('/api/rhythms').then((o) => {
+    document.getElementById('rhythmsList').innerHTML = (o.rhythms || []).map((r) =>
+      '<div class="item"><div class="txt"><div class="t">' + esc(r.name) + '</div><div class="d">' + esc(r.startDate || '') + ' → ' + esc(r.endDate || '') + ' · acad ' + esc(String(r.academic)) + ' / tech ' + esc(String(r.technical)) + '</div></div><button class="btn" style="padding:2px 8px" onclick="api(\'/api/rhythms/' + r.id + '\',\'DELETE\').then(loadRhythmsUI).catch((e)=>toast(e.message))">🗑️</button></div>').join('')
+      || '<div class="empty">Default weekly rhythm active</div>';
+  }).catch((e) => toast(e.message));
+}
+function addRhythm() {
+  const name = document.getElementById('rhName').value.trim();
+  const from = document.getElementById('rhFrom').value, to = document.getElementById('rhTo').value;
+  if (!name || !from || !to) return toast('Name + dates needed');
+  api('/api/rhythms', 'POST', { name, startDate: from, endDate: to, academic: 2, technical: 1, note: 'via Planner' }).then(loadRhythmsUI).catch((e) => toast(e.message));
+}
+function loadFollowups() {
+  api('/api/outreach/followups').then((o) => {
+    document.getElementById('followList').innerHTML = (o.followups || []).map((p) =>
+      '<div class="item"><div class="txt"><div class="t">' + esc(p.name) + ' — ' + esc(p.university || '') + '</div><div class="d">' + esc(p.status) + ' since ' + esc((p.contacted || '').slice(0, 10)) + '</div></div><button class="btn" style="padding:2px 8px" onclick="markFollowupSent(\'' + p.id + '\')">Done</button></div>').join('')
+      || '<div class="empty">Nothing overdue 🎉</div>';
+  }).catch((e) => toast(e.message));
+}
+function markFollowupSent(id) { api('/api/outreach/followups/' + id + '/sent', 'POST').then(loadFollowups).catch((e) => toast(e.message)); }
 
 // ----- SETTINGS -----
 function loadSettings() {
@@ -1250,6 +1404,8 @@ function loadSettings() {
     document.getElementById('sToken').textContent = localStorage.getItem('hubToken');
     document.getElementById('sModel').value = s.geminiModel || 'gemini-flash-latest';
     document.getElementById('sJudge').value = s.judgeModel || '';
+    document.getElementById('digestBtn').textContent = s.digestMode ? 'ON' : 'OFF';
+    loadQuota();
     loadClassroom();
   }).catch((e) => toast(e.message));
 }
@@ -1261,6 +1417,32 @@ function saveSettings() {
   if (judge) body.judgeModel = judge;
   if (gemini) body.geminiKey = gemini;
   api('/api/settings', 'POST', body).then((r) => { document.getElementById('sGemini').value = ''; localStorage.setItem('geminiSet', r.geminiKeySet ? '1' : '0'); loadSettings(); toast('Saved' + (r.geminiKeySet ? ' — AI active' : '')); }).catch((e) => toast(e.message));
+}
+function toggleDigest() {
+  api('/api/settings').then((o) => {
+    api('/api/settings', 'POST', { digestMode: !o.settings.digestMode }).then(loadSettings).catch((e) => toast(e.message));
+  }).catch((e) => toast(e.message));
+}
+function loadQuota() {
+  api('/api/usage').then((o) => {
+    const u = o.usage || {}, f = o.freeTier || {};
+    document.getElementById('quotaBox').innerHTML =
+      '<div class="settings-row"><div class="l">Gemini calls</div><div class="v">' + (u.geminiCalls || 0) + '</div></div>' +
+      '<div class="settings-row"><div class="l">Fallbacks / chats / proactive</div><div class="v">' + (u.geminiFallbacks || 0) + ' / ' + (u.chatMessages || 0) + ' / ' + (u.proactiveSent || 0) + '</div></div>' +
+      '<div class="settings-row"><div class="l">Free-tier reads/day</div><div class="v">' + (f.firestoreReadsPerDay || 50000) + '</div></div>' +
+      '<div class="settings-row"><div class="l"></div><div class="v"><small>' + esc(f.note || '') + '</small></div></div>';
+  }).catch((e) => { document.getElementById('quotaBox').innerHTML = '<div class="empty">Unavailable</div>'; });
+}
+function exportAll() {
+  api('/api/export').then((o) => {
+    const blob = new Blob([JSON.stringify(o.export, null, 1)], { type: 'application/json' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'career-os-backup.json';
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+    toast('Backup downloaded ✅');
+  }).catch((e) => toast(e.message));
 }
 // Boot last: every top-level let/const above must be initialized before init touches them.
 init();

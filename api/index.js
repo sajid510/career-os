@@ -73,7 +73,15 @@ async function notify(title, body, type, level, opts) {
   const rec = await addDoc('notifications', {
     title, body, type: type || 'system', level: level || 'info', read: false, createdAt: nowIso(), source: (opts && opts.source) || 'hub',
   });
-  const push = await sendPush(title, body, type, level);
+  // Digest mode: store everything, push only warnings and above.
+  let push = { sent: 0, skipped: false };
+  try {
+    const s = await getSettings();
+    if (!(s.digestMode && (level === 'info' || !level))) push = await sendPush(title, body, type, level);
+    else push = { sent: 0, skipped: true };
+  } catch (e) {
+    push = await sendPush(title, body, type, level);
+  }
   return { notification: rec, push };
 }
 
@@ -436,6 +444,15 @@ app.post('/api/goals', requireAuth, async (req, res) => {
   const rec = await addDoc('goals', { goal: req.body.goal, by: req.body.by || '', status: 'active', createdAt: nowIso() });
   res.json({ ok: true, goal: rec });
 });
+app.patch('/api/goals/:id', requireAuth, async (req, res) => {
+  const doc = await getDoc('goals/' + req.params.id);
+  if (!doc) return res.status(404).json({ ok: false, error: 'not found' });
+  const patch = {};
+  ['goal', 'by', 'status'].forEach((k) => { if (req.body[k] !== undefined) patch[k] = req.body[k]; });
+  if (!Object.keys(patch).length) return res.status(400).json({ ok: false, error: 'nothing to update' });
+  await setDoc('goals/' + req.params.id, patch);
+  res.json({ ok: true });
+});
 app.delete('/api/goals/:id', requireAuth, async (req, res) => {
   await deleteDoc('goals/' + req.params.id);
   res.json({ ok: true });
@@ -515,6 +532,7 @@ app.get('/api/routine/week', requireAuth, async (req, res) => {
 // ---- deadlines ----
 app.get('/api/deadlines', requireAuth, async (req, res) => {
   let deadlines = await listDocs('deadlines');
+  if (!req.query.includeArchived) deadlines = deadlines.filter((d) => !d.archived);
   deadlines = deadlines.sort((a, b) => a.dueAt.localeCompare(b.dueAt));
   res.json({ ok: true, deadlines: deadlines.map((d) => ({ id: d.id, title: d.title, dueAt: d.dueAt, human: inDays(d.dueAt), date: humanDate(d.dueAt), category: d.category, notes: d.notes || '', critical: !!d.critical, status: d.status || 'pending' })) });
 });
@@ -626,6 +644,19 @@ app.post('/api/events', requireAuth, async (req, res) => {
   const rec = await addDoc('events', { title: req.body.title, startAt: req.body.startAt, endAt: req.body.endAt || req.body.startAt, notes: req.body.notes || '', createdAt: nowIso() });
   res.json({ ok: true, event: rec });
 });
+app.patch('/api/events/:id', requireAuth, async (req, res) => {
+  const doc = await getDoc('events/' + req.params.id);
+  if (!doc) return res.status(404).json({ ok: false, error: 'not found' });
+  const patch = {};
+  ['title', 'startAt', 'endAt', 'notes'].forEach((k) => { if (req.body[k] !== undefined) patch[k] = req.body[k]; });
+  if (!Object.keys(patch).length) return res.status(400).json({ ok: false, error: 'nothing to update' });
+  await setDoc('events/' + req.params.id, patch);
+  res.json({ ok: true });
+});
+app.delete('/api/events/:id', requireAuth, async (req, res) => {
+  await deleteDoc('events/' + req.params.id);
+  res.json({ ok: true });
+});
 
 // ---- notifications ----
 app.get('/api/notifications', requireAuth, async (req, res) => {
@@ -636,6 +667,14 @@ app.get('/api/notifications', requireAuth, async (req, res) => {
   res.json({ ok: true, notifications: notifications.slice(0, 200) });
 });
 app.post('/api/notifications/read', requireAuth, async (req, res) => {
+  if (req.body.all) {
+    const items = await listDocs('notifications');
+    let n = 0;
+    for (const item of items) {
+      if (!item.read) { await setDoc('notifications/' + item.id, { read: true }); n++; }
+    }
+    return res.json({ ok: true, marked: n });
+  }
   const ids = req.body.ids || [];
   for (const id of ids) { await setDoc('notifications/' + id, { read: true }); }
   res.json({ ok: true, marked: ids.length });
@@ -657,6 +696,23 @@ app.post('/api/reminders', requireAuth, async (req, res) => {
 app.delete('/api/reminders/:id', requireAuth, async (req, res) => {
   await deleteDoc('reminders/' + req.params.id);
   res.json({ ok: true });
+});
+app.patch('/api/reminders/:id', requireAuth, async (req, res) => {
+  const doc = await getDoc('reminders/' + req.params.id);
+  if (!doc) return res.status(404).json({ ok: false, error: 'not found' });
+  const patch = {};
+  ['title', 'body', 'dueAt', 'leadMinutes', 'fired'].forEach((k) => { if (req.body[k] !== undefined) patch[k] = req.body[k]; });
+  if (!Object.keys(patch).length) return res.status(400).json({ ok: false, error: 'nothing to update' });
+  await setDoc('reminders/' + req.params.id, patch);
+  res.json({ ok: true });
+});
+app.post('/api/reminders/:id/snooze', requireAuth, async (req, res) => {
+  const doc = await getDoc('reminders/' + req.params.id);
+  if (!doc || !doc.dueAt) return res.status(404).json({ ok: false, error: 'not found' });
+  const hours = Math.max(1, Math.min(72, parseInt(req.body.hours, 10) || 24));
+  const dueAt = new Date(new Date(doc.dueAt).getTime() + hours * 3600000).toISOString();
+  await setDoc('reminders/' + req.params.id, { dueAt, fired: false });
+  res.json({ ok: true, dueAt });
 });
 
 // ---- weekly class schedule (routine) ----
@@ -840,13 +896,13 @@ app.get('/api/settings', requireAuth, async (req, res) => {
     settings: {
       hubName: s.hubName, hubTagline: s.hubTagline, ownerEmail: s.ownerEmail, geminiModel: s.geminiModel, judgeModel: s.judgeModel,
       careerIoWebhook: s.careerIoWebhook ? 'set' : '', careerIoSpreadsheetUrl: s.careerIoSpreadsheetUrl || '',
-      robotDbUrl: s.robotDbUrl, systemsEnabled: s.systemsEnabled || {}, reminderLeadMinutes: s.reminderLeadMinutes,
+      robotDbUrl: s.robotDbUrl, systemsEnabled: s.systemsEnabled || {}, reminderLeadMinutes: s.reminderLeadMinutes, digestMode: !!s.digestMode,
       classroomClientIdSet: !!s.classroomClientId, classroomConnected: !!s.classroomRefreshToken,
     },
   });
 });
 app.post('/api/settings', requireAuth, async (req, res) => {
-  const allowed = ['hubName', 'hubTagline', 'ownerEmail', 'geminiModel', 'judgeModel', 'careerIoWebhook', 'careerIoSecret', 'careerIoSpreadsheetUrl', 'robotDbUrl', 'systemsEnabled', 'reminderLeadMinutes', 'classroomClientId', 'classroomClientSecret'];
+  const allowed = ['hubName', 'hubTagline', 'ownerEmail', 'geminiModel', 'judgeModel', 'digestMode', 'careerIoWebhook', 'careerIoSecret', 'careerIoSpreadsheetUrl', 'robotDbUrl', 'systemsEnabled', 'reminderLeadMinutes', 'classroomClientId', 'classroomClientSecret'];
   const patch = {};
   allowed.forEach((k) => { if (req.body[k] !== undefined) patch[k] = req.body[k]; });
   if (req.body.geminiKey) patch.geminiKey = req.body.geminiKey;
@@ -953,7 +1009,7 @@ app.patch('/api/scholarships/:id', requireAuth, async (req, res) => {
   const doc = await getDoc('scholarships/' + req.params.id);
   if (!doc) return res.status(404).json({ ok: false, error: 'not found' });
   const patch = {};
-  ['name', 'country', 'deadline', 'cgpaReq', 'status', 'priority', 'coverage', 'docs', 'notes', 'url'].forEach((k) => { if (req.body[k] !== undefined) patch[k] = req.body[k]; });
+  ['name', 'country', 'deadline', 'cgpaReq', 'status', 'priority', 'coverage', 'docs', 'notes', 'url', 'checklist'].forEach((k) => { if (req.body[k] !== undefined) patch[k] = req.body[k]; });
   await setDoc('scholarships/' + req.params.id, patch);
   res.json({ ok: true });
 });
@@ -1040,6 +1096,117 @@ app.post('/api/rhythms', requireAuth, async (req, res) => {
 app.delete('/api/rhythms/:id', requireAuth, async (req, res) => {
   await deleteDoc('rhythms/' + req.params.id);
   res.json({ ok: true });
+});
+app.patch('/api/rhythms/:id', requireAuth, async (req, res) => {
+  const doc = await getDoc('rhythms/' + req.params.id);
+  if (!doc) return res.status(404).json({ ok: false, error: 'not found' });
+  const patch = {};
+  ['name', 'startDate', 'endDate', 'academic', 'technical', 'note', 'status'].forEach((k) => { if (req.body[k] !== undefined) patch[k] = req.body[k]; });
+  if (!Object.keys(patch).length) return res.status(400).json({ ok: false, error: 'nothing to update' });
+  await setDoc('rhythms/' + req.params.id, patch);
+  res.json({ ok: true });
+});
+
+// ---- triage (miss detection + recovery options) ----
+app.get('/api/triage', requireAuth, async (req, res) => {
+  const { triageMisses } = require('../lib/triage');
+  res.json({ ok: true, triage: await triageMisses() });
+});
+
+// ---- scholarship scorecards ----
+app.get('/api/scholarships/:id/scorecard', requireAuth, async (req, res) => {
+  const { scorecard } = require('../lib/trackers');
+  const doc = await getDoc('scholarships/' + req.params.id);
+  if (!doc) return res.status(404).json({ ok: false, error: 'not found' });
+  res.json({ ok: true, scorecard: scorecard(Object.assign({ id: req.params.id }, doc)) });
+});
+
+// ---- outreach follow-ups ----
+app.get('/api/outreach/followups', requireAuth, async (req, res) => {
+  const profs = await listDocs('professors');
+  const cutoff = new Date(Date.now() - 21 * 86400000).toISOString();
+  const due = profs
+    .filter((p) => ['Emailed', 'No Response'].includes(p.status) && p.contacted && p.contacted < cutoff && !p.followUpSent)
+    .map((p) => ({ id: p.id, name: p.name || '(unnamed)', university: p.university, status: p.status, contacted: p.contacted }));
+  res.json({ ok: true, followups: due });
+});
+app.post('/api/outreach/followups/:id/sent', requireAuth, async (req, res) => {
+  await setDoc('professors/' + req.params.id, { followUpSent: nowIso() });
+  res.json({ ok: true });
+});
+
+// ---- notice watcher ----
+app.get('/api/watches', requireAuth, async (req, res) => {
+  const { ensureWatches } = require('../lib/watcher');
+  const items = await ensureWatches();
+  res.json({ ok: true, watches: items.map((w) => ({ id: w.id, name: w.name, url: w.url, lastCheck: w.lastCheck || '', lastChange: w.lastChange || '' })) });
+});
+app.post('/api/watches', requireAuth, async (req, res) => {
+  if (!req.body.url) return res.status(400).json({ ok: false, error: 'url required' });
+  const rec = await addDoc('watches', { name: req.body.name || req.body.url, url: req.body.url, hash: '', lastCheck: '', lastChange: '', createdAt: nowIso() });
+  res.json({ ok: true, watch: rec });
+});
+app.delete('/api/watches/:id', requireAuth, async (req, res) => {
+  await deleteDoc('watches/' + req.params.id);
+  res.json({ ok: true });
+});
+
+// ---- issue playbooks ----
+app.get('/api/playbooks', requireAuth, async (req, res) => {
+  const { ensurePlaybooks } = require('../lib/playbooks');
+  res.json({ ok: true, playbooks: await ensurePlaybooks() });
+});
+app.post('/api/playbooks', requireAuth, async (req, res) => {
+  if (!req.body.title || !req.body.body) return res.status(400).json({ ok: false, error: 'title and body required' });
+  const rec = await addDoc('playbooks', { title: req.body.title, triggers: req.body.triggers || '', body: req.body.body, createdAt: nowIso() });
+  res.json({ ok: true, playbook: rec });
+});
+app.patch('/api/playbooks/:id', requireAuth, async (req, res) => {
+  const doc = await getDoc('playbooks/' + req.params.id);
+  if (!doc) return res.status(404).json({ ok: false, error: 'not found' });
+  const patch = {};
+  ['title', 'triggers', 'body'].forEach((k) => { if (req.body[k] !== undefined) patch[k] = req.body[k]; });
+  if (!Object.keys(patch).length) return res.status(400).json({ ok: false, error: 'nothing to update' });
+  await setDoc('playbooks/' + req.params.id, patch);
+  res.json({ ok: true });
+});
+app.delete('/api/playbooks/:id', requireAuth, async (req, res) => {
+  await deleteDoc('playbooks/' + req.params.id);
+  res.json({ ok: true });
+});
+
+// ---- weekly review 2.0 ----
+app.get('/api/review/weekly', requireAuth, async (req, res) => {
+  const saved = await getDoc('review/weekly');
+  res.json({ ok: true, review: saved || null });
+});
+
+// ---- one-tap export ----
+app.get('/api/export', requireAuth, async (req, res) => {
+  const cols = ['tasks', 'deadlines', 'milestones', 'phases', 'goals', 'schedule', 'reminders', 'notifications', 'devices', 'systems', 'learning_events', 'learning_facts', 'scholarships', 'universities', 'professors', 'notes', 'rhythms', 'watches', 'playbooks', 'conversations', 'events'];
+  const dump = { exportedAt: nowIso(), collections: {} };
+  for (const c of cols) dump.collections[c] = await listDocs(c);
+  for (const p of ['profile/main', 'learning/stats', 'mission/cgpa', 'plan/main', 'review/weekly', 'settings/hub']) {
+    const d = await getDoc(p);
+    if (d) dump.collections[p] = d;
+  }
+  if (dump.collections['settings/hub']) delete dump.collections['settings/hub'].geminiKey;
+  res.json({ ok: true, export: dump });
+});
+
+// ---- free-tier usage (honest counters, not live quota) ----
+app.get('/api/usage', requireAuth, async (req, res) => {
+  const stats = (await getDoc('learning/stats')) || {};
+  res.json({
+    ok: true,
+    usage: {
+      geminiCalls: stats.geminiCalls || 0,
+      geminiFallbacks: stats.geminiFallbacks || 0,
+      chatMessages: stats.chatMessages || 0,
+      proactiveSent: stats.proactiveSent || 0,
+    },
+    freeTier: { firestoreReadsPerDay: 50000, firestoreWritesPerDay: 20000, note: 'Counters track app activity, not live Google quota. Stay an order of magnitude under these numbers.' },
+  });
 });
 
 // ---- mission: CGPA ----
@@ -1144,7 +1311,29 @@ app.post('/api/cron/daily', requireAuth, async (req, res) => {
     await notify('Morning brief', brief, 'agent', 'info', { source: 'daily' });
     let slips = { sent: false };
     try { slips = await detectSlips(); } catch (e) { slips = { sent: false, error: e.message }; }
-    res.json({ ok: true, brief, routine, reminders, classReminders, dlReminders, deadlinePings, connectors, slips });
+    let archived = { archived: 0 };
+    try {
+      const { archiveClassroomPast } = require('../lib/review');
+      archived = await archiveClassroomPast();
+    } catch (e) { archived = { archived: 0, error: e.message }; }
+    let watched = [];
+    try {
+      const { checkWatches } = require('../lib/watcher');
+      watched = await checkWatches();
+    } catch (e) { watched = [{ error: e.message }]; }
+    let followups = 0;
+    try {
+      const profs = await listDocs('professors');
+      const cutoff = new Date(Date.now() - 21 * 86400000).toISOString();
+      for (const p of profs) {
+        if (['Emailed', 'No Response'].includes(p.status) && p.contacted && p.contacted < cutoff && !p.followUpSent) {
+          await notify('Follow-up due: ' + (p.name || p.university), 'No reply in 3+ weeks. Ask Pulse to draft a follow-up, or mark responded.', 'task', 'reminder', { source: 'followup' });
+          await setDoc('professors/' + p.id, { followUpSent: nowIso() });
+          followups++;
+        }
+      }
+    } catch (e) { followups = -1; }
+    res.json({ ok: true, brief, routine, reminders, classReminders, dlReminders, deadlinePings, connectors, slips, archived, watched, followups });
   } catch (e) {
     res.status(500).json({ ok: false, error: e.message });
   }
@@ -1152,13 +1341,22 @@ app.post('/api/cron/daily', requireAuth, async (req, res) => {
 app.post('/api/cron/weekly', requireAuth, async (req, res) => {
   try {
     const connectors = await syncAll('full');
-    const tasks = await listDocs('tasks');
-    const events = await listDocs('learning_events');
-    const completed = tasks.filter((t) => t.status === 'done' && t.completedAt && daysUntil(t.completedAt) >= -7);
-    await notify('Weekly review', 'This week: ' + completed.length + ' task' + (completed.length === 1 ? '' : 's') + ' completed. Systems synced: ' + Object.keys(connectors).join(', ') + '.', 'agent', 'info', { source: 'weekly' });
+    let review = null;
+    try {
+      const { buildWeeklyReview } = require('../lib/review');
+      review = await buildWeeklyReview();
+    } catch (e) { review = { error: e.message }; }
+    if (review && !review.error) {
+      const cats = Object.entries(review.byCategory || {}).map(([k, v]) => k + ' ' + v).join(', ') || 'none yet';
+      await notify('Weekly review', 'Done: ' + review.completed7d + ' tasks (' + cats + '). Routine streak: ' + review.routineStreak + 'd. Focus next: ' + (review.proposal || []).join(' | '), 'agent', 'info', { source: 'weekly' });
+    } else {
+      const tasks = await listDocs('tasks');
+      const completed = tasks.filter((t) => t.status === 'done' && t.completedAt && daysUntil(t.completedAt) >= -7);
+      await notify('Weekly review', 'This week: ' + completed.length + ' tasks completed.', 'agent', 'info', { source: 'weekly' });
+    }
     let judging = { judged: 0 };
     try { judging = await judgeRecentConversations(5); } catch (e) { judging = { error: e.message }; }
-    res.json({ ok: true, completed: completed.length, connectors, judging });
+    res.json({ ok: true, review, connectors, judging });
   } catch (e) {
     res.status(500).json({ ok: false, error: e.message });
   }
